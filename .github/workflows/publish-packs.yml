@@ -43,8 +43,14 @@ jobs:
             echo "Missing secret QALITA_ENV_FILE" >&2
             exit 1
           fi
-          printf '%s' "$QALITA_ENV_FILE" > ~/.qalita/.env-armand.leopold
+          printf '%s\n' "$QALITA_ENV_FILE" > ~/.qalita/.env-armand.leopold
           chmod 600 ~/.qalita/.env-armand.leopold
+          # Export variables to GITHUB_ENV so they are available to subsequent steps
+          while IFS= read -r line; do
+            if [[ "$line" != "#"* && -n "$line" ]]; then
+              echo "$line" >> "$GITHUB_ENV"
+            fi
+          done <<< "$QALITA_ENV_FILE"
 
       - name: Copy shared scripts to all packs
         run: |

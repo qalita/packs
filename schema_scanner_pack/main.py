@@ -83,7 +83,7 @@ with Pack() as pack:
         # column_list_hash (: column_list_changed detection)
         # Hash of sorted column names to detect schema changes
         column_list_str = ",".join(sorted(df_curr.columns))
-        column_list_hash = hashlib.md5(column_list_str.encode()).hexdigest()
+        column_list_hash = hashlib.md5(column_list_str.encode(), usedforsecurity=False).hexdigest()
         pack.metrics.data.append({
             "key": "column_list_hash",
             "value": column_list_hash,
@@ -93,7 +93,7 @@ with Pack() as pack:
         # column_order_hash (: column_list_or_order_changed detection)
         # Hash of column names in order to detect order changes
         column_order_str = ",".join(df_curr.columns)
-        column_order_hash = hashlib.md5(column_order_str.encode()).hexdigest()
+        column_order_hash = hashlib.md5(column_order_str.encode(), usedforsecurity=False).hexdigest()
         pack.metrics.data.append({
             "key": "column_order_hash",
             "value": column_order_hash,
@@ -116,7 +116,7 @@ with Pack() as pack:
         # column_types_hash (: column_types_changed detection)
         # Hash of all column types to detect type changes
         types_str = ",".join([f"{col}:{df_curr[col].dtype}" for col in df_curr.columns])
-        column_types_hash = hashlib.md5(types_str.encode()).hexdigest()
+        column_types_hash = hashlib.md5(types_str.encode(), usedforsecurity=False).hexdigest()
         pack.metrics.data.append({
             "key": "column_types_hash",
             "value": column_types_hash,
