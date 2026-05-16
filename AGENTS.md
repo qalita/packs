@@ -1,55 +1,103 @@
 # AGENTS.md — Qalita Public Packs
 
-Ce fichier fournit des instructions aux agents IA pour travailler sur ce dépôt.
+Instructions for AI agents working on this repository.
 
-## Projet
+## Project
 
-**Qalita Packs** — Collection open source de packs d'analyse de qualité de données pour la plateforme Qalita.
+**Qalita Packs** — Open source collection of data quality analysis packs for the Qalita platform.
 
-- **Organisation GitHub** : `qalita-io`
-- **Licence** : Apache 2.0
-- **Visibilité** : Public
+- **Organization** : `qalita-io`
+- **License** : Apache 2.0
+- **Visibility** : Public
+- **Runtime** : Python >= 3.10
+
+## Tech Stack
+
+| Component | Technologies |
+|-----------|-------------|
+| **Runtime** | Python >= 3.10 |
+| **Data processing** | pandas, numpy |
+| **Quality frameworks** | Great Expectations, Soda Core, dbt Core |
+| **Healthcare** | FHIR standards |
+| **Core dependency** | qalita_core (PyPI) |
+| **Linting** | Black, Pylint, Flake8 |
+
+## Dependencies
+
+Each pack has its own `pyproject.toml` or `requirements.txt`. Common dependencies:
+- `qalita_core>=0.1.0`
+- `pandas>=2.0`, `numpy>=1.24`
+- Pack-specific: `great-expectations`, `soda-core`, `dbt-core`, `fhirclient`
+
+## Build/Lint/Test Commands
+
+```bash
+# Install qalita_core (dependency for all packs)
+pip install qalita_core
+
+# Run tests (if available)
+cd <pack_directory> && python -m pytest tests/ -v
+
+# Lint a specific pack
+cd <pack_directory> && black . --check
+cd <pack_directory> && pylint .
+
+# Format code
+cd <pack_directory> && black .
+
+# Version management
+./scripts/bump_pack_versions.sh
+./scripts/push_all_packs.sh
+```
+
+## Code Conventions
+
+- Each pack is a standalone folder at root level
+- Packs use `qalita_core` as dependency for data access
+- **License** : Include Apache 2.0 header in all new files
+- **Formatter** : Black
+- **Linting** : Pylint, Flake8
+- **Tests** : pytest (when applicable)
+- **Naming** : `<name>_pack/` for pack directories
+- **Imports** : Use `qalita_core` abstractions for data sources
 
 ## Architecture
 
 ```
 packs/
-├── profiling_pack/              # Profilage des données
-├── duplicates_finder_pack/      # Détection de doublons
-├── outlier_detection_pack/      # Détection d'outliers
-├── numeric_validation_pack/     # Validation numérique
-├── text_validation_pack/        # Validation de texte
-├── pattern_validation_pack/     # Validation de patterns
-├── schema_scanner_pack/         # Scan de schéma
-├── pii_scanner_pack/            # Détection de données personnelles
-├── referential_integrity_pack/  # Intégrité référentielle
-├── accepted_values_pack/        # Valeurs acceptées
-├── accuracy_pack/               # Exactitude des données
-├── data_compare_pack/           # Comparaison de datasets
-├── data_drift_pack/             # Détection de drift
-├── timeliness_pack/             # Fraîcheur des données
-├── fhir_compliance_pack/        # Conformité FHIR
-├── great_expectations_pack/     # Intégration Great Expectations
-├── soda_pack/                   # Intégration Soda
-├── dbt_checks_pack/             # Intégration dbt
-├── scripts/                     # Scripts utilitaires
+├── profiling_pack/              # Data profiling
+├── duplicates_finder_pack/      # Duplicate detection
+├── outlier_detection_pack/      # Outlier detection
+├── numeric_validation_pack/     # Numeric validation
+├── text_validation_pack/        # Text validation
+├── pattern_validation_pack/     # Pattern validation
+├── schema_scanner_pack/         # Schema scanning
+├── pii_scanner_pack/            # PII detection
+├── referential_integrity_pack/  # Referential integrity
+├── accepted_values_pack/        # Accepted values
+├── accuracy_pack/               # Data accuracy
+├── data_compare_pack/           # Dataset comparison
+├── data_drift_pack/             # Drift detection
+├── timeliness_pack/             # Data freshness
+├── fhir_compliance_pack/        # FHIR compliance
+├── great_expectations_pack/     # Great Expectations integration
+├── soda_pack/                   # Soda integration
+├── dbt_checks_pack/             # dbt integration
+├── scripts/                     # Utility scripts
+│   ├── bump_pack_versions.sh
+│   └── push_all_packs.sh
 └── tests/                       # Tests
 ```
 
-## Conventions de code
+## Git Workflow
 
-- Chaque pack est un dossier autonome à la racine
-- Les packs utilisent `qalita_core` comme dépendance pour l'accès aux données
-- **Licence** : Inclure l'en-tête Apache 2.0 dans tout nouveau fichier
-- **Scripts** : `bump_pack_versions.sh` et `push_all_packs.sh` pour la gestion des versions
+- **Tags** : Strict semver `X.Y.Z` (⚠️ NO `v` prefix)
+- **Commits** : English, conventional commits (`feat:`, `fix:`, `chore:`)
+- **Branches** : `main` (prod), feature branches for development
 
-## Git workflow
+## Rules
 
-- **Tags** : Semver strict `X.Y.Z` (⚠️ PAS de préfixe `v`)
-- **Commits** : Messages en anglais, conventionnels (`feat:`, `fix:`, `chore:`)
-
-## Règles
-
-- ❌ Ne pas modifier la structure d'un pack existant sans comprendre l'impact sur les utilisateurs
-- ✅ Tout nouveau pack doit suivre la structure des packs existants
-- ✅ Documenter les inputs/outputs de chaque pack
+- ❌ Do not modify existing pack structure without understanding user impact
+- ✅ New packs must follow existing pack structure
+- ✅ Document inputs/outputs of each pack
+- ✅ Include Apache 2.0 license header in new files
