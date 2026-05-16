@@ -1,4 +1,4 @@
-name: Publish packs to QALITA
+name: "Release: Publish Packs"
 on:
   push:
     branches:
