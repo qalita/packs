@@ -72,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           source .venv/bin/activate
-          qalita worker -n armand.leopold --mode "${QALITA_AGENT_MODE}" --token "${QALITA_AGENT_TOKEN}" --url "${QALITA_AGENT_ENDPOINT}" login
+          qalita worker -n armand.leopold login
           shopt -s nullglob
           for dir in */ ; do
             [ -d "$dir" ] || continue
