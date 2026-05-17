@@ -15,5 +15,3 @@ Runs a Great Expectations expectations suite on the dataset loaded via QALITA.
 ### Metrics
 - `expectation_result` per expectation
 - `score` = success ratio
-
-

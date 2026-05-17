@@ -14,4 +14,3 @@ disable=
     too-many-positional-arguments,
     unused-import,
     unused-variable
-

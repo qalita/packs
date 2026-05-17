@@ -30,6 +30,7 @@ USE_MINIMAL_MODE_THRESHOLD = 5_000_000  # Use minimal mode if more than 5M rows
 # Try to import Polars for efficient row counting
 try:
     import polars as pl
+
     POLARS_AVAILABLE = True
 except ImportError:
     POLARS_AVAILABLE = False
@@ -40,7 +41,7 @@ def _get_row_count_efficient(paths):
     """Get row count efficiently without loading all data."""
     if not paths:
         return 0
-    
+
     # Try Polars first (fastest)
     if POLARS_AVAILABLE:
         try:
@@ -48,13 +49,16 @@ def _get_row_count_efficient(paths):
             return lf.select(pl.len()).collect(engine="streaming").item()
         except Exception:
             pass
-    
+
     # Fallback: read parquet metadata
     try:
         import pyarrow.parquet as pq
+
         total = 0
         for path in paths:
-            if isinstance(path, str) and path.lower().endswith((".parquet", ".pq")):
+            if isinstance(path, str) and path.lower().endswith(
+                (".parquet", ".pq")
+            ):
                 pf = pq.ParquetFile(path)
                 total += pf.metadata.num_rows
         return total
@@ -65,38 +69,46 @@ def _get_row_count_efficient(paths):
 def _load_parquet_with_sampling(paths, max_rows=None, sample_fraction=None):
     """
     Load parquet files with optional sampling for big data.
-    
+
     For datasets larger than MAX_ROWS_FOR_FULL_PROFILE, automatically
     samples to SAMPLE_SIZE_FOR_LARGE_DATASETS rows.
-    
+
     Returns:
         tuple: (DataFrame, is_sampled, original_row_count)
     """
     if not paths:
         return pd.DataFrame(), False, 0
-    
+
     # Ensure paths is a list
     if isinstance(paths, str):
         paths = [paths]
-    
+
     # Filter to valid parquet paths
-    parquet_paths = [p for p in paths if isinstance(p, str) and p.lower().endswith((".parquet", ".pq"))]
+    parquet_paths = [
+        p
+        for p in paths
+        if isinstance(p, str) and p.lower().endswith((".parquet", ".pq"))
+    ]
     if not parquet_paths:
         return pd.DataFrame(), False, 0
-    
+
     # Get total row count efficiently
     total_rows = _get_row_count_efficient(parquet_paths)
-    
+
     # Determine if sampling is needed
     is_sampled = False
     effective_max_rows = max_rows or MAX_ROWS_FOR_FULL_PROFILE
-    
+
     if total_rows > effective_max_rows:
         sample_size = min(SAMPLE_SIZE_FOR_LARGE_DATASETS, effective_max_rows)
-        logger.info(f"Large dataset detected ({total_rows:,} rows). Sampling {sample_size:,} rows for profiling.")
-        print(f"Large dataset detected ({total_rows:,} rows). Sampling {sample_size:,} rows for profiling.")
+        logger.info(
+            f"Large dataset detected ({total_rows:,} rows). Sampling {sample_size:,} rows for profiling."
+        )
+        print(
+            f"Large dataset detected ({total_rows:,} rows). Sampling {sample_size:,} rows for profiling."
+        )
         is_sampled = True
-        
+
         # Use Polars for efficient sampling if available
         if POLARS_AVAILABLE:
             try:
@@ -105,8 +117,10 @@ def _load_parquet_with_sampling(paths, max_rows=None, sample_fraction=None):
                 df = lf.head(sample_size).collect().to_pandas()
                 return df, is_sampled, total_rows
             except Exception as e:
-                logger.warning(f"Polars sampling failed: {e}, falling back to pandas")
-        
+                logger.warning(
+                    f"Polars sampling failed: {e}, falling back to pandas"
+                )
+
         # Pandas fallback: load only first chunk
         try:
             df = pd.read_parquet(parquet_paths[0], engine="pyarrow")
@@ -115,7 +129,7 @@ def _load_parquet_with_sampling(paths, max_rows=None, sample_fraction=None):
             return df, is_sampled, total_rows
         except Exception:
             pass
-    
+
     # Load full dataset (small enough)
     try:
         if POLARS_AVAILABLE:
@@ -125,7 +139,9 @@ def _load_parquet_with_sampling(paths, max_rows=None, sample_fraction=None):
             if len(parquet_paths) == 1:
                 df = pd.read_parquet(parquet_paths[0], engine="pyarrow")
             else:
-                dfs = [pd.read_parquet(p, engine="pyarrow") for p in parquet_paths]
+                dfs = [
+                    pd.read_parquet(p, engine="pyarrow") for p in parquet_paths
+                ]
                 df = pd.concat(dfs, ignore_index=True)
         return df, False, len(df)
     except Exception as e:
@@ -139,9 +155,13 @@ def _load_parquet_with_sampling(paths, max_rows=None, sample_fraction=None):
 with Pack() as pack:
     if pack.source_config.get("type") == "database":
         # On récupère la table ou la requête depuis la config ou on la demande explicitement
-        table_or_query = pack.source_config.get("config", {}).get("table_or_query")
+        table_or_query = pack.source_config.get("config", {}).get(
+            "table_or_query"
+        )
         if not table_or_query:
-            raise ValueError("For a 'database' type source, you must specify 'table_or_query' in the config.")
+            raise ValueError(
+                "For a 'database' type source, you must specify 'table_or_query' in the config."
+            )
         pack.load_data("source", table_or_query=table_or_query)
     else:
         pack.load_data("source")
@@ -152,9 +172,11 @@ with Pack() as pack:
 
     # Normaliser la source en une liste de tuples (nom_dataset, dataframe)
     raw_df_source = pack.df_source
-    configured_table_or_query = pack.source_config.get("config", {}).get("table_or_query")
+    configured_table_or_query = pack.source_config.get("config", {}).get(
+        "table_or_query"
+    )
     data_items = []
-    
+
     # Track sampling metadata
     sampling_metadata = {}
 
@@ -162,8 +184,12 @@ with Pack() as pack:
     def _load_parquet_if_path(obj, dataset_name=None):
         """Load parquet with automatic sampling for large datasets."""
         try:
-            if isinstance(obj, str) and obj.lower().endswith((".parquet", ".pq")):
-                df, is_sampled, original_rows = _load_parquet_with_sampling([obj])
+            if isinstance(obj, str) and obj.lower().endswith(
+                (".parquet", ".pq")
+            ):
+                df, is_sampled, original_rows = _load_parquet_with_sampling(
+                    [obj]
+                )
                 if dataset_name and is_sampled:
                     sampling_metadata[dataset_name] = {
                         "sampled": True,
@@ -172,7 +198,9 @@ with Pack() as pack:
                     }
                 return df
             elif isinstance(obj, list):
-                df, is_sampled, original_rows = _load_parquet_with_sampling(obj)
+                df, is_sampled, original_rows = _load_parquet_with_sampling(
+                    obj
+                )
                 if dataset_name and is_sampled:
                     sampling_metadata[dataset_name] = {
                         "sampled": True,
@@ -187,16 +215,18 @@ with Pack() as pack:
     if isinstance(raw_df_source, list):
         # Check if this is a list of chunk paths that should be treated as one dataset
         total_rows = _get_row_count_efficient(raw_df_source)
-        
+
         # Load with sampling
-        df, is_sampled, original_rows = _load_parquet_with_sampling(raw_df_source)
+        df, is_sampled, original_rows = _load_parquet_with_sampling(
+            raw_df_source
+        )
         if is_sampled:
             sampling_metadata[dataset_scope_name] = {
                 "sampled": True,
                 "original_rows": original_rows,
                 "sample_rows": len(df),
             }
-        
+
         # Si la config fournit une liste de noms, l'utiliser si elle correspond en taille
         names = None
         if isinstance(configured_table_or_query, (list, tuple)):
@@ -220,10 +250,14 @@ with Pack() as pack:
     all_alerts_records = []
 
     # Détection centrale des chunks
-    raw_items_list = raw_df_source if isinstance(raw_df_source, list) else [raw_df_source]
+    raw_items_list = (
+        raw_df_source if isinstance(raw_df_source, list) else [raw_df_source]
+    )
     names_for_detect = names if (isinstance(raw_df_source, list)) else None
-    treat_chunks_as_one, auto_named, common_base_detected = detect_chunked_from_items(
-        raw_items_list, names_for_detect, dataset_scope_name
+    treat_chunks_as_one, auto_named, common_base_detected = (
+        detect_chunked_from_items(
+            raw_items_list, names_for_detect, dataset_scope_name
+        )
     )
 
     # Accumulateur d'agrégation commun
@@ -247,17 +281,19 @@ with Pack() as pack:
         sample_info = sampling_metadata.get(dataset_name, {})
         is_sampled = sample_info.get("sampled", False)
         original_rows = sample_info.get("original_rows", len(df))
-        
+
         # Build profile title with sampling info
         if is_sampled:
             title = f"Profiling Report for {dataset_name} (Sampled: {len(df):,} of {original_rows:,} rows)"
-            print(f"Note: Dataset was sampled from {original_rows:,} to {len(df):,} rows for profiling.")
+            print(
+                f"Note: Dataset was sampled from {original_rows:,} to {len(df):,} rows for profiling."
+            )
         else:
             title = f"Profiling Report for {dataset_name}"
-        
+
         # Use minimal mode for very large samples to reduce memory usage
         use_minimal = len(df) > USE_MINIMAL_MODE_THRESHOLD
-        
+
         # Profiling pour ce dataset
         profile = ProfileReport(
             df,
@@ -265,9 +301,11 @@ with Pack() as pack:
             correlations={"auto": {"calculate": False}},
             minimal=use_minimal,  # Use minimal mode for very large datasets
         )
-        
+
         if use_minimal:
-            print(f"Using minimal profiling mode for large dataset ({len(df):,} rows).")
+            print(
+                f"Using minimal profiling mode for large dataset ({len(df):,} rows)."
+            )
 
         # Sauvegarde HTML
         html_file_name = f"{dataset_name}_report.html"
@@ -275,7 +313,9 @@ with Pack() as pack:
 
         # Pour les sources fichier, on dépose aussi le rapport à côté du fichier source
         if pack.source_config["type"] == "file" and len(data_items) == 1:
-            source_file_dir = os.path.dirname(pack.source_config["config"]["path"])
+            source_file_dir = os.path.dirname(
+                pack.source_config["config"]["path"]
+            )
             current_date = datetime.now().strftime("%Y%m%d")
             report_file_path = os.path.join(
                 source_file_dir,
@@ -294,7 +334,9 @@ with Pack() as pack:
                 html_content = f.read()
                 tables = pd.read_html(StringIO(html_content))
         except ValueError as e:
-            print(f"No tables found in the HTML report for {dataset_name}: {e}")
+            print(
+                f"No tables found in the HTML report for {dataset_name}: {e}"
+            )
             tables = [pd.DataFrame()]
 
         ############################ Metrics (par dataset ou agrégé)
@@ -347,7 +389,10 @@ with Pack() as pack:
                     entry = {
                         "key": key,
                         "value": round_if_numeric(value),
-                        "scope": {"perimeter": "dataset", "value": dataset_name},
+                        "scope": {
+                            "perimeter": "dataset",
+                            "value": dataset_name,
+                        },
                     }
                 pack.metrics.data.append(entry)
 
@@ -379,30 +424,89 @@ with Pack() as pack:
                 col_scope = {
                     "perimeter": "column",
                     "value": col,
-                    "parent_scope": {"perimeter": "dataset", "value": dataset_name},
+                    "parent_scope": {
+                        "perimeter": "dataset",
+                        "value": dataset_name,
+                    },
                 }
                 # Percentiles (: percentile_10_in_range, percentile_25_in_range, etc.)
-                pack.metrics.data.extend([
-                    {"key": "percentile_10", "value": str(round(float(np.percentile(col_data, 10)), 4)), "scope": col_scope.copy()},
-                    {"key": "percentile_25", "value": str(round(float(np.percentile(col_data, 25)), 4)), "scope": col_scope.copy()},
-                    {"key": "percentile_75", "value": str(round(float(np.percentile(col_data, 75)), 4)), "scope": col_scope.copy()},
-                    {"key": "percentile_90", "value": str(round(float(np.percentile(col_data, 90)), 4)), "scope": col_scope.copy()},
-                ])
+                pack.metrics.data.extend(
+                    [
+                        {
+                            "key": "percentile_10",
+                            "value": str(
+                                round(float(np.percentile(col_data, 10)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                        {
+                            "key": "percentile_25",
+                            "value": str(
+                                round(float(np.percentile(col_data, 25)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                        {
+                            "key": "percentile_75",
+                            "value": str(
+                                round(float(np.percentile(col_data, 75)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                        {
+                            "key": "percentile_90",
+                            "value": str(
+                                round(float(np.percentile(col_data, 90)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                    ]
+                )
                 # Standard deviation (: sample_stddev_in_range, population_stddev_in_range)
-                pack.metrics.data.extend([
-                    {"key": "sample_stddev", "value": str(round(float(col_data.std(ddof=1)), 4)), "scope": col_scope.copy()},
-                    {"key": "population_stddev", "value": str(round(float(col_data.std(ddof=0)), 4)), "scope": col_scope.copy()},
-                ])
+                pack.metrics.data.extend(
+                    [
+                        {
+                            "key": "sample_stddev",
+                            "value": str(
+                                round(float(col_data.std(ddof=1)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                        {
+                            "key": "population_stddev",
+                            "value": str(
+                                round(float(col_data.std(ddof=0)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                    ]
+                )
                 # Variance (: sample_variance_in_range, population_variance_in_range)
-                pack.metrics.data.extend([
-                    {"key": "sample_variance", "value": str(round(float(col_data.var(ddof=1)), 4)), "scope": col_scope.copy()},
-                    {"key": "population_variance", "value": str(round(float(col_data.var(ddof=0)), 4)), "scope": col_scope.copy()},
-                ])
+                pack.metrics.data.extend(
+                    [
+                        {
+                            "key": "sample_variance",
+                            "value": str(
+                                round(float(col_data.var(ddof=1)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                        {
+                            "key": "population_variance",
+                            "value": str(
+                                round(float(col_data.var(ddof=0)), 4)
+                            ),
+                            "scope": col_scope.copy(),
+                        },
+                    ]
+                )
 
         # Score basé sur p_cells_missing (directement depuis general_data)
         if not treat_chunks_as_one:
             try:
-                p_cells_missing = float(general_data.get("p_cells_missing", 0) or 0)
+                p_cells_missing = float(
+                    general_data.get("p_cells_missing", 0) or 0
+                )
             except Exception:
                 p_cells_missing = 0.0
             score_value = max(min(1 - p_cells_missing, 1), 0)
@@ -427,7 +531,10 @@ with Pack() as pack:
                     {
                         "key": "score",
                         "value": str(round(score_value, 2)),
-                        "scope": {"perimeter": "dataset", "value": pack.source_config["name"]},
+                        "scope": {
+                            "perimeter": "dataset",
+                            "value": pack.source_config["name"],
+                        },
                     }
                 )
 
@@ -439,12 +546,19 @@ with Pack() as pack:
                 lambda x: {
                     "perimeter": "column",
                     "value": extract_variable_name(x),
-                    "parent_scope": {"perimeter": "dataset", "value": dataset_name},
+                    "parent_scope": {
+                        "perimeter": "dataset",
+                        "value": dataset_name,
+                    },
                 }
             )
-            alerts_data["level"] = alerts_data["content"].apply(determine_level)
+            alerts_data["level"] = alerts_data["content"].apply(
+                determine_level
+            )
         else:
-            print(f"No alerts table found in the HTML report for {dataset_name}.")
+            print(
+                f"No alerts table found in the HTML report for {dataset_name}."
+            )
             alerts_data = pd.DataFrame()
 
         all_alerts_records.extend(alerts_data.to_dict(orient="records"))
@@ -462,7 +576,10 @@ with Pack() as pack:
                     "scope": {
                         "perimeter": "column",
                         "value": variable_name,
-                        "parent_scope": {"perimeter": "dataset", "value": dataset_name},
+                        "parent_scope": {
+                            "perimeter": "dataset",
+                            "value": dataset_name,
+                        },
                     },
                 }
                 pack.schemas.data.append(entry)
@@ -487,7 +604,10 @@ with Pack() as pack:
                     {
                         "key": "dataset",
                         "value": dataset_name,
-                        "scope": {"perimeter": "dataset", "value": dataset_name},
+                        "scope": {
+                            "perimeter": "dataset",
+                            "value": dataset_name,
+                        },
                     }
                 )
 
@@ -504,23 +624,29 @@ with Pack() as pack:
     # En mode chunk agrégé, construire les métriques et schémas consolidés dans un périmètre unique
     if treat_chunks_as_one:
         # Finaliser via l'agrégateur commun
-        pack.metrics.data, pack.schemas.data = comp_agg.finalize_metrics_and_schemas(
-            dataset_scope_name
+        pack.metrics.data, pack.schemas.data = (
+            comp_agg.finalize_metrics_and_schemas(dataset_scope_name)
         )
 
-
-
     ################## Remove unwanted metrics or recommendations
-        
+
     unwanted_keys = [
         "histogram",
         "value_counts_index_sorted",
         "value_counts_without_nan",
     ]
-    pack.metrics.data = [item for item in pack.metrics.data if item.get("key") not in unwanted_keys]
+    pack.metrics.data = [
+        item
+        for item in pack.metrics.data
+        if item.get("key") not in unwanted_keys
+    ]
 
     unwanted_keys = ["Unsupported"]
-    pack.recommendations.data = [item for item in pack.recommendations.data if item.get("type") not in unwanted_keys]
+    pack.recommendations.data = [
+        item
+        for item in pack.recommendations.data
+        if item.get("type") not in unwanted_keys
+    ]
 
     pack.metrics.save()
     pack.recommendations.save()

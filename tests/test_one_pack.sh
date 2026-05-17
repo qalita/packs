@@ -22,7 +22,7 @@ process_data_pack() {
     mkdir -p "${dataset_dir}/output/${current_datetime}"
     log_file="${dataset_dir}/output/${current_datetime}/${dataset}_${pack}.log"
     # Redirect the outputs of this iteration to the log file
-    {    
+    {
         echo "Processing Dataset: ${dataset} with Test Pack: ${pack}"
 
         # 1. Copy source_conf.json from the dataset directory into the current test pack directory

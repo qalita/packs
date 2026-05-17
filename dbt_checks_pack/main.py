@@ -4,7 +4,14 @@ import os
 import subprocess
 
 
-def run_dbt_tests(project_dir, profiles_dir=None, target=None, models=None, threads=None, vars_dict=None):
+def run_dbt_tests(
+    project_dir,
+    profiles_dir=None,
+    target=None,
+    models=None,
+    threads=None,
+    vars_dict=None,
+):
     cmd = ["dbt", "test", "--project-dir", project_dir]
     if profiles_dir:
         cmd += ["--profiles-dir", profiles_dir]
@@ -17,7 +24,9 @@ def run_dbt_tests(project_dir, profiles_dir=None, target=None, models=None, thre
     if vars_dict:
         cmd += ["--vars", json.dumps(vars_dict)]
     env = os.environ.copy()
-    process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    process = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+    )
     return process.returncode, process.stdout
 
 
@@ -31,7 +40,9 @@ with Pack() as pack:
     threads = config.get("threads")
     vars_dict = config.get("vars")
 
-    code, output = run_dbt_tests(project_dir, profiles_dir, target, models, threads, vars_dict)
+    code, output = run_dbt_tests(
+        project_dir, profiles_dir, target, models, threads, vars_dict
+    )
     print(output)
 
     # run_results.json est sous target/run_results.json par défaut
@@ -54,11 +65,29 @@ with Pack() as pack:
 
     score = 1.0 if tests_total == 0 else tests_passed / tests_total
 
-    pack.metrics.data.extend([
-        {"key": "tests_total", "value": tests_total, "scope": {"perimeter": "dataset", "value": project_dir}},
-        {"key": "tests_passed", "value": tests_passed, "scope": {"perimeter": "dataset", "value": project_dir}},
-        {"key": "tests_failed", "value": tests_failed, "scope": {"perimeter": "dataset", "value": project_dir}},
-        {"key": "score", "value": str(round(score, 2)), "scope": {"perimeter": "dataset", "value": project_dir}},
-    ])
+    pack.metrics.data.extend(
+        [
+            {
+                "key": "tests_total",
+                "value": tests_total,
+                "scope": {"perimeter": "dataset", "value": project_dir},
+            },
+            {
+                "key": "tests_passed",
+                "value": tests_passed,
+                "scope": {"perimeter": "dataset", "value": project_dir},
+            },
+            {
+                "key": "tests_failed",
+                "value": tests_failed,
+                "scope": {"perimeter": "dataset", "value": project_dir},
+            },
+            {
+                "key": "score",
+                "value": str(round(score, 2)),
+                "scope": {"perimeter": "dataset", "value": project_dir},
+            },
+        ]
+    )
 
     pack.metrics.save()

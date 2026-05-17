@@ -21,5 +21,3 @@ Validates a dataset's compliance against a subset of HL7 FHIR (default `Patient`
   }
 }
 ```
-
-

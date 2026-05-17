@@ -61,5 +61,3 @@ for prop in "${PROP_FILES[@]}"; do
 done
 
 echo "Done."
-
-

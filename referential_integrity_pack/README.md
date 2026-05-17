@@ -8,5 +8,3 @@ Validates foreign key relationships between tables/datasets.
 
 ### Config
 Define relations in `pack_conf.json` under `job.relations`.
-
-

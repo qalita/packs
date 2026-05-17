@@ -5,16 +5,24 @@ from datetime import datetime
 import re
 import os
 from qalita_core.pack import Pack
-from qalita_core.aggregation import detect_chunked_from_items, TimelinessAggregator, normalize_and_dedupe_recommendations
+from qalita_core.aggregation import (
+    detect_chunked_from_items,
+    TimelinessAggregator,
+    normalize_and_dedupe_recommendations,
+)
 
 # --- Chargement des données ---
 # Pour un fichier : pack.load_data("source")
 # Pour une base : pack.load_data("source", table_or_query="ma_table")
 with Pack() as pack:
     if pack.source_config.get("type") == "database":
-        table_or_query = pack.source_config.get("config", {}).get("table_or_query")
+        table_or_query = pack.source_config.get("config", {}).get(
+            "table_or_query"
+        )
         if not table_or_query:
-            raise ValueError("For a 'database' type source, you must specify 'table_or_query' in the config.")
+            raise ValueError(
+                "For a 'database' type source, you must specify 'table_or_query' in the config."
+            )
         pack.load_data("source", table_or_query=table_or_query)
     else:
         pack.load_data("source")
@@ -60,12 +68,10 @@ with Pack() as pack:
                 return False
         return False
 
-
     def calculate_timeliness_score(days_since):
         # Score is 1.0 if days_since is 0,
         # and decreases linearly to 0.0 if days_since is 365 or more
         return max(0.0, 1 - (days_since / 365))
-
 
     raw_df_source = pack.df_source
     configured = pack.pack_config.get("job", {}).get("compute_score_columns")
@@ -84,7 +90,9 @@ with Pack() as pack:
 
     def _load_parquet_if_path(obj):
         try:
-            if isinstance(obj, str) and obj.lower().endswith((".parquet", ".pq")):
+            if isinstance(obj, str) and obj.lower().endswith(
+                (".parquet", ".pq")
+            ):
                 return pd.read_parquet(obj, engine="pyarrow")
         except Exception:
             pass
@@ -98,15 +106,23 @@ with Pack() as pack:
             names_for_detect = [str(n) for n in names]
         else:
             base = pack.source_config["name"]
-            dataset_items = [(f"{base}_{i+1}", df) for i, df in enumerate(loaded)]
+            dataset_items = [
+                (f"{base}_{i+1}", df) for i, df in enumerate(loaded)
+            ]
             names_for_detect = [name for name, _ in dataset_items]
     else:
-        dataset_items = [(pack.source_config["name"], _load_parquet_if_path(raw_df_source))]
+        dataset_items = [
+            (pack.source_config["name"], _load_parquet_if_path(raw_df_source))
+        ]
         names_for_detect = None
 
-    raw_items_list = raw_df_source if isinstance(raw_df_source, list) else [raw_df_source]
-    treat_chunks_as_one, auto_named, common_base_detected = detect_chunked_from_items(
-        raw_items_list, names_for_detect, pack.source_config["name"]
+    raw_items_list = (
+        raw_df_source if isinstance(raw_df_source, list) else [raw_df_source]
+    )
+    treat_chunks_as_one, auto_named, common_base_detected = (
+        detect_chunked_from_items(
+            raw_items_list, names_for_detect, pack.source_config["name"]
+        )
     )
 
     tim_agg = TimelinessAggregator()
@@ -143,7 +159,10 @@ with Pack() as pack:
         {
             "key": "date_columns_count",
             "value": str(date_columns_count),
-            "scope": {"perimeter": "dataset", "value": pack.source_config["name"]},
+            "scope": {
+                "perimeter": "dataset",
+                "value": pack.source_config["name"],
+            },
         }
     )
 
@@ -154,13 +173,22 @@ with Pack() as pack:
             file_path = pack.source_config.get("config", {}).get("path")
             if file_path and os.path.exists(file_path):
                 mtime = os.path.getmtime(file_path)
-                staleness_days = (datetime.now() - datetime.fromtimestamp(mtime)).days
-                pack.metrics.data.append({
-                    "key": "data_staleness_days",
-                    "value": str(staleness_days),
-                    "scope": {"perimeter": "dataset", "value": pack.source_config["name"]},
-                })
-                print(f"Data staleness: {staleness_days} days since last file modification")
+                staleness_days = (
+                    datetime.now() - datetime.fromtimestamp(mtime)
+                ).days
+                pack.metrics.data.append(
+                    {
+                        "key": "data_staleness_days",
+                        "value": str(staleness_days),
+                        "scope": {
+                            "perimeter": "dataset",
+                            "value": pack.source_config["name"],
+                        },
+                    }
+                )
+                print(
+                    f"Data staleness: {staleness_days} days since last file modification"
+                )
         except Exception as e:
             print(f"Could not compute data staleness: {e}")
     elif pack.source_config.get("type") == "folder":
@@ -176,20 +204,31 @@ with Pack() as pack:
                         if mtime > latest_mtime:
                             latest_mtime = mtime
                 if latest_mtime > 0:
-                    staleness_days = (datetime.now() - datetime.fromtimestamp(latest_mtime)).days
-                    pack.metrics.data.append({
-                        "key": "data_staleness_days",
-                        "value": str(staleness_days),
-                        "scope": {"perimeter": "dataset", "value": pack.source_config["name"]},
-                    })
-                    print(f"Data staleness: {staleness_days} days since last file modification in folder")
+                    staleness_days = (
+                        datetime.now() - datetime.fromtimestamp(latest_mtime)
+                    ).days
+                    pack.metrics.data.append(
+                        {
+                            "key": "data_staleness_days",
+                            "value": str(staleness_days),
+                            "scope": {
+                                "perimeter": "dataset",
+                                "value": pack.source_config["name"],
+                            },
+                        }
+                    )
+                    print(
+                        f"Data staleness: {staleness_days} days since last file modification in folder"
+                    )
         except Exception as e:
             print(f"Could not compute data staleness for folder: {e}")
 
     ############################ Compute timeliness_score for Each Column
 
     if date_columns_count > 0 and treat_chunks_as_one:
-        compute_score_columns = pack.pack_config.get("job", {}).get("compute_score_columns")
+        compute_score_columns = pack.pack_config.get("job", {}).get(
+            "compute_score_columns"
+        )
         metrics, recommendations = tim_agg.finalize_metrics(
             dataset_scope_name=pack.source_config["name"],
             compute_score_columns=compute_score_columns,
@@ -208,7 +247,9 @@ with Pack() as pack:
                     or pack.source_config["name"]
                 )
                 days_since_latest = int(item["value"])
-                timeliness_score = calculate_timeliness_score(days_since_latest)
+                timeliness_score = calculate_timeliness_score(
+                    days_since_latest
+                )
                 pack.metrics.data.append(
                     {
                         "key": "timeliness_score",
@@ -216,7 +257,10 @@ with Pack() as pack:
                         "scope": {
                             "perimeter": "column",
                             "value": column_name,
-                            "parent_scope": {"perimeter": "dataset", "value": dataset_label},
+                            "parent_scope": {
+                                "perimeter": "dataset",
+                                "value": dataset_label,
+                            },
                         },
                     }
                 )
@@ -224,30 +268,47 @@ with Pack() as pack:
     ############################ Compute Dataset Score Based on Average timeliness_score
 
     if date_columns_count > 0 and not treat_chunks_as_one:
-        compute_score_columns = pack.pack_config.get("job", {}).get("compute_score_columns")
+        compute_score_columns = pack.pack_config.get("job", {}).get(
+            "compute_score_columns"
+        )
         if not compute_score_columns:
             compute_score_columns = None
         ts_metrics = [
             m
             for m in pack.metrics.data
-            if m.get("key") == "timeliness_score" and m.get("scope", {}).get("perimeter") == "column"
+            if m.get("key") == "timeliness_score"
+            and m.get("scope", {}).get("perimeter") == "column"
         ]
         dataset_to_scores = {}
         for m in ts_metrics:
             scope = m.get("scope", {})
-            dataset_label = scope.get("parent_scope", {}).get("value") or pack.source_config["name"]
+            dataset_label = (
+                scope.get("parent_scope", {}).get("value")
+                or pack.source_config["name"]
+            )
             column_name = scope.get("value")
-            if compute_score_columns is None or column_name in compute_score_columns:
+            if (
+                compute_score_columns is None
+                or column_name in compute_score_columns
+            ):
                 try:
                     score_value = float(m.get("value", 0))
                 except Exception:
                     continue
-                dataset_to_scores.setdefault(dataset_label, []).append(score_value)
+                dataset_to_scores.setdefault(dataset_label, []).append(
+                    score_value
+                )
         for dataset_label, scores in dataset_to_scores.items():
             if not scores:
                 continue
             average_score = sum(scores) / len(scores)
-            pack.metrics.data.append({"key": "score", "value": str(round(average_score, 2)), "scope": {"perimeter": "dataset", "value": dataset_label}})
+            pack.metrics.data.append(
+                {
+                    "key": "score",
+                    "value": str(round(average_score, 2)),
+                    "scope": {"perimeter": "dataset", "value": dataset_label},
+                }
+            )
 
     pack.metrics.save()
     pack.recommendations.save()

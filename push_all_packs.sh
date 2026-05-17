@@ -49,5 +49,3 @@ for prop in "${PROP_FILES[@]}"; do
 done
 
 echo "All packs processed."
-
-
