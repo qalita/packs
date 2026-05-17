@@ -8,5 +8,3 @@ Monitors statistical drift between a reference and a current dataset using KS-te
 
 ### Config
 Configure windows and test type in `pack_conf.json`.
-
-
