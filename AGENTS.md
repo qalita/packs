@@ -95,6 +95,10 @@ packs/
 - **Commits** : English, conventional commits (`feat:`, `fix:`, `chore:`)
 - **Branches** : `main` (prod), feature branches for development
 
+## Creating a New Pack
+
+**REQUIRED SKILL:** Before creating a new pack (or modifying pack structure/config/versioning), read [.claude/skills/creating-qalita-packs/SKILL.md](.claude/skills/creating-qalita-packs/SKILL.md) — it documents required files, config templates, the `main.py` pattern, versioning, and publishing.
+
 ## Rules
 
 - ❌ Do not modify existing pack structure without understanding user impact
