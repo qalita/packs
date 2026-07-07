@@ -18,7 +18,7 @@ dependencies = [
     "beautifulsoup4>=4.12.3",
     "psycopg2-binary>=2.9.9",
     "qalita-core>=1.5.0",
-    "pyarrow>=19.0.0",
+    "pyarrow>=23.0.1",
 ]
 
 [build-system]
