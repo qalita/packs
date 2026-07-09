@@ -97,7 +97,12 @@ packs/
 
 ## Creating a New Pack
 
-**REQUIRED SKILL:** Before creating a new pack (or modifying pack structure/config/versioning), read [.claude/skills/creating-qalita-packs/SKILL.md](.claude/skills/creating-qalita-packs/SKILL.md) — it documents required files, config templates, the `main.py` pattern, versioning, and publishing.
+**REQUIRED SKILL:** Before creating a new pack (or modifying pack structure/config/versioning), install the `qalita-pack-creation` plugin from the [`qalita-io/skills`](https://github.com/qalita-io/skills) marketplace — it documents required files, config templates, the `main.py` pattern, versioning, and publishing.
+
+```
+/plugin marketplace add qalita-io/skills
+/plugin install qalita-pack-creation@qalita-skills
+```
 
 ## Rules
 
