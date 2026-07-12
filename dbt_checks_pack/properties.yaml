@@ -16,6 +16,6 @@ tags:
 - Governance
 - Testing
 type: validity
-url: https://github.com/qalita-io/packs/tree/main/dbt_checks_pack
+url: https://github.com/qalita/packs/tree/main/dbt_checks_pack
 version: 0.1.21
 visibility: public

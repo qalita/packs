@@ -20,4 +20,4 @@ Runs data quality checks using Soda Core on your dataset(s) and computes per-che
 - Each table is treated as a dataset; names come from `table_or_query` or default to `{source_name}_{index}`. Scopes include `parent_scope` for databases.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

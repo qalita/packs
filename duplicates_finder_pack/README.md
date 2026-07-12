@@ -26,4 +26,4 @@ Detects duplicate rows per dataset and computes duplication metrics and a datase
 - Each table is treated as a dataset; dataset names are taken from `table_or_query` or `{source_name}_{index}`. Scopes are dataset-specific and include `parent_scope` for databases when relevant.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

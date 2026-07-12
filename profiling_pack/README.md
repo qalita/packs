@@ -104,4 +104,4 @@ Profiles your dataset(s) using `ydata-profiling` and produces comprehensive metr
 - When multiple tables are returned, each table is treated as a separate dataset. Names come from `table_or_query` (if a list) or default to `{source_name}_{index}`. Dataset metrics include a `parent_scope` when the source is a database.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

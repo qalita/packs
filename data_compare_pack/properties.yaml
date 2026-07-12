@@ -17,6 +17,6 @@ tags:
 - ETL Validation
 - Reconciliation
 type: consistency
-url: https://github.com/qalita-io/packs/tree/main/data_compare_pack
+url: https://github.com/qalita/packs/tree/main/data_compare_pack
 version: 2.0.54
 visibility: public

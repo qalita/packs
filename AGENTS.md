@@ -6,7 +6,7 @@ Instructions for AI agents working on this repository.
 
 **Qalita Packs** — Open source collection of data quality analysis packs for the Qalita platform.
 
-- **Organization** : `qalita-io`
+- **Organization** : `qalita`
 - **License** : Apache 2.0
 - **Visibility** : Public
 - **Runtime** : Python >= 3.10
@@ -97,10 +97,10 @@ packs/
 
 ## Creating a New Pack
 
-**REQUIRED SKILL:** Before creating a new pack (or modifying pack structure/config/versioning), install the `qalita-pack-creation` plugin from the [`qalita-io/skills`](https://github.com/qalita-io/skills) marketplace — it documents required files, config templates, the `main.py` pattern, versioning, and publishing.
+**REQUIRED SKILL:** Before creating a new pack (or modifying pack structure/config/versioning), install the `qalita-pack-creation` plugin from the [`qalita/skills`](https://github.com/qalita/skills) marketplace — it documents required files, config templates, the `main.py` pattern, versioning, and publishing.
 
 ```
-/plugin marketplace add qalita-io/skills
+/plugin marketplace add qalita/skills
 /plugin install qalita-pack-creation@qalita-skills
 ```
 

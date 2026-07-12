@@ -20,4 +20,4 @@ Assesses the freshness of date columns and computes per-column and per-dataset t
 - Each table is a dataset; names from `table_or_query` or `{source_name}_{index}` and scopes include `parent_scope` for databases.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

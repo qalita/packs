@@ -18,4 +18,4 @@ Generates a minimal profile and extracts schema (column list) per dataset, emitt
 - Each table is represented as an individual dataset; names are from `table_or_query` or `{source_name}_{index}`.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

@@ -17,6 +17,6 @@ tags:
 - Numeric Ranges
 - Geospatial
 type: validity
-url: https://github.com/qalita-io/packs/tree/main/numeric_validation_pack
+url: https://github.com/qalita/packs/tree/main/numeric_validation_pack
 version: 0.1.1
 visibility: public

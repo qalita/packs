@@ -18,6 +18,6 @@ tags:
 - Interoperability
 - Compliance
 type: interoperability
-url: https://github.com/qalita-io/packs/tree/main/fhir_compliance_pack
+url: https://github.com/qalita/packs/tree/main/fhir_compliance_pack
 version: 0.1.22
 visibility: public

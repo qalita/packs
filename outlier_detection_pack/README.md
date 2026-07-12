@@ -38,4 +38,4 @@ The pack assesses the data and computes the following metrics:
 - Each table is processed as a dataset; names derive from `table_or_query` or `{source_name}_{index}`. Scopes include `parent_scope` for databases.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

@@ -26,4 +26,4 @@ Compares a source dataset against a target dataset using DataComPy and produces 
 - Each pairing uses dataset labels from `table_or_query` or `{source_name}_{index}`; scopes are dataset-specific.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.

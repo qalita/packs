@@ -20,4 +20,4 @@ Assesses decimal precision consistency of float columns and computes per-column 
 - Each table is treated as a dataset; names from `table_or_query` or `{source_name}_{index}`. Database sources include `parent_scope` in scopes.
 
 ### Contribute
-This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita-io/packs.
+This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.
