@@ -1,0 +1,21 @@
+compatible_sources:
+- mysql
+- postgresql
+- sqlite
+- oracle
+- file
+- folder
+description: Evaluates an OMOP CDM instance against the OHDSI Data Quality Dashboard
+  check suite (conformance, completeness, plausibility)
+icon: icon.png
+name: omop_cdm
+tags:
+- Healthcare
+- OMOP
+- CDM
+- OHDSI
+- Interoperability
+type: conformity
+version: 0.1.0
+visibility: private
+url: https://github.com/qalita/packs/tree/main/omop_cdm_pack
