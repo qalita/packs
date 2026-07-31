@@ -105,8 +105,12 @@ TABLE_CHECK_SPECS: Tuple[CheckSpec, ...] = (
 # to a specific concept, so conceptId is threaded through as a param
 # alongside the triggering cell value.
 CONCEPT_CHECK_SPECS: Tuple[CheckSpec, ...] = (
-    CheckSpec("plausibleGender", TRIGGER_VALUE, ("conceptId",)),
-    CheckSpec("plausibleGenderUseDescendants", TRIGGER_VALUE, ("conceptId",)),
+    CheckSpec("plausibleGender", TRIGGER_VALUE, ("conceptId", "conceptName")),
+    CheckSpec(
+        "plausibleGenderUseDescendants",
+        TRIGGER_VALUE,
+        ("conceptId", "conceptName"),
+    ),
     # The evaluationFilter for this check is
     # `plausibleUnitConceptIdsThreshold!=''`: the gate is the
     # threshold column, but the payload consumed by Task 9 is the
@@ -114,7 +118,7 @@ CONCEPT_CHECK_SPECS: Tuple[CheckSpec, ...] = (
     CheckSpec(
         "plausibleUnitConceptIds",
         TRIGGER_VALUE,
-        param_columns=("conceptId",),
+        param_columns=("conceptId", "conceptName"),
         trigger_column="plausibleUnitConceptIdsThreshold",
         value_column="plausibleUnitConceptIds",
     ),
@@ -151,6 +155,35 @@ class CheckInstance:
         if self.cdm_field_name:
             return f"{self.cdm_table_name}.{self.cdm_field_name}"
         return self.cdm_table_name
+
+    @property
+    def rendered_description(self) -> str:
+        """`description` with its `@token` placeholders filled in.
+
+        `description` itself is vendored, verbatim Apache-2.0 text
+        (see NOTICE) and is never mutated -- this only builds a new
+        string. Only the four placeholders this instance actually has
+        a value for are substituted (`@cdmTableName`, `@cdmFieldName`,
+        `@conceptId`, `@conceptName`); any other `@token` -- including
+        one of these four when the instance has no value for it, e.g.
+        `@cdmFieldName` on a table-level check -- is left untouched.
+        A leftover token is a visible, honest signal that something
+        is unrendered; silently blanking it would not be.
+        """
+        text = self.description
+        substitutions = (
+            ("@cdmTableName", self.cdm_table_name),
+            (
+                "@cdmFieldName",
+                self.cdm_field_name.upper() if self.cdm_field_name else None,
+            ),
+            ("@conceptId", self.params.get("conceptId")),
+            ("@conceptName", self.params.get("conceptName")),
+        )
+        for token, value in substitutions:
+            if value:
+                text = text.replace(token, value)
+        return text
 
 
 def _assert_supported(cdm_version: str) -> None:

@@ -17,18 +17,22 @@ def _evaluated(
     kahn="Conformance",
     table="PERSON",
     field="person_id",
+    check_level="FIELD",
     violated=0,
     denominator=10,
+    description=None,
+    param_items=(),
 ):
     instance = CheckInstance(
         check_name=check_name,
-        check_level="FIELD",
+        check_level=check_level,
         cdm_table_name=table,
         cdm_field_name=field,
         threshold=0.0,
         severity=severity,
         kahn_category=kahn,
-        description=f"{check_name} description",
+        description=description or f"{check_name} description",
+        param_items=param_items,
     )
     return EvaluatedCheck(
         instance,
@@ -301,6 +305,188 @@ def test_recommendation_level_is_info_when_nothing_violated():
     assert recommendation["level"] == "info"
 
 
+# --- table-level (no-field) checks are scoped as "table", not "column" ---
+
+
+def test_pct_violated_rows_uses_table_perimeter_for_table_level_checks():
+    results = [
+        _evaluated(
+            "cdmTable",
+            CheckStatus.FAIL,
+            table="OBSERVATION_PERIOD",
+            field=None,
+            check_level="TABLE",
+            violated=1,
+            denominator=1,
+        )
+    ]
+    metrics = _by_key(build_metrics(results, "ds"), "pct_violated_rows")
+    assert len(metrics) == 1
+    assert metrics[0]["scope"]["perimeter"] == "table"
+    assert metrics[0]["scope"]["value"] == "OBSERVATION_PERIOD"
+
+
+def test_pct_violated_rows_uses_column_perimeter_for_field_level_checks():
+    results = [
+        _evaluated(
+            "isRequired",
+            CheckStatus.FAIL,
+            table="PERSON",
+            field="person_id",
+            violated=1,
+            denominator=1,
+        )
+    ]
+    metrics = _by_key(build_metrics(results, "ds"), "pct_violated_rows")
+    assert metrics[0]["scope"]["perimeter"] == "column"
+    assert metrics[0]["scope"]["value"] == "PERSON.person_id"
+
+
+def test_recommendation_scope_uses_table_perimeter_for_table_level_checks():
+    results = [
+        _evaluated(
+            "cdmTable",
+            CheckStatus.FAIL,
+            severity="fatal",
+            table="OBSERVATION_PERIOD",
+            field=None,
+            check_level="TABLE",
+            violated=1,
+            denominator=1,
+        )
+    ]
+    recommendation = build_recommendations(results, "ds")[0]
+    assert recommendation["scope"]["perimeter"] == "table"
+    assert recommendation["scope"]["value"] == "OBSERVATION_PERIOD"
+
+
+def test_recommendation_scope_uses_column_perimeter_for_field_level_checks():
+    results = [
+        _evaluated(
+            "isRequired",
+            CheckStatus.FAIL,
+            severity="fatal",
+            table="PERSON",
+            field="person_id",
+            violated=1,
+            denominator=1,
+        )
+    ]
+    recommendation = build_recommendations(results, "ds")[0]
+    assert recommendation["scope"]["perimeter"] == "column"
+    assert recommendation["scope"]["value"] == "PERSON.person_id"
+
+
+# --- severity matching is case-insensitive, like kahn category matching ---
+
+
+def test_score_weighting_is_case_insensitive_for_severity():
+    # A miscased severity must still get its real weight (3.0 for
+    # fatal) rather than silently falling back to the 1.0 default,
+    # which would mask fatal weighting in the score.
+    results = [
+        _evaluated("isRequired", CheckStatus.FAIL, severity="FATAL"),
+        _evaluated(
+            "measureValueCompleteness",
+            CheckStatus.PASS,
+            severity="characterization",
+        ),
+    ]
+    score = _by_key(build_metrics(results, "ds"), "score", "dataset")[0]
+    # Same 0.25 as test_score_is_severity_weighted, which uses
+    # lowercase "fatal" -- proves casing doesn't change the weight.
+    assert float(score["value"]) == 0.25
+
+
+def test_recommendations_match_fatal_severity_case_insensitively():
+    results = [
+        _evaluated("isRequired", CheckStatus.FAIL, severity="Fatal"),
+    ]
+    recommendations = build_recommendations(results, "ds")
+    assert len(recommendations) == 1
+
+
+def test_every_real_catalog_severity_is_one_of_fatal_convention_characterization():
+    catalog = load_catalog("5.4")
+    seen = {instance.severity.strip().lower() for instance in catalog}
+    assert seen == {"fatal", "convention", "characterization"}
+
+
+# --- fatal_failure_count -------------------------------------------------
+
+
+def test_fatal_failure_count_is_emitted_at_dataset_scope():
+    results = [
+        _evaluated("isRequired", CheckStatus.FAIL, severity="fatal"),
+        _evaluated("cdmField", CheckStatus.FAIL, severity="fatal"),
+        _evaluated("cdmDatatype", CheckStatus.FAIL, severity="convention"),
+        _evaluated("isPrimaryKey", CheckStatus.PASS, severity="fatal"),
+    ]
+    metrics = _by_key(
+        build_metrics(results, "ds"), "fatal_failure_count", "dataset"
+    )
+    assert len(metrics) == 1
+    assert metrics[0]["value"] == "2"
+
+
+def test_fatal_failure_count_is_emitted_per_table():
+    results = [
+        _evaluated(
+            "isRequired",
+            CheckStatus.FAIL,
+            severity="fatal",
+            table="PERSON",
+        ),
+        _evaluated(
+            "isRequired",
+            CheckStatus.FAIL,
+            severity="fatal",
+            table="PERSON",
+        ),
+        _evaluated(
+            "isRequired",
+            CheckStatus.FAIL,
+            severity="fatal",
+            table="CONDITION_OCCURRENCE",
+        ),
+    ]
+    metrics = _by_key(
+        build_metrics(results, "ds"), "fatal_failure_count", "table"
+    )
+    values = {m["scope"]["value"]: m["value"] for m in metrics}
+    assert values["PERSON"] == "2"
+    assert values["CONDITION_OCCURRENCE"] == "1"
+
+
+def test_fatal_failure_count_values_are_strings():
+    metrics = build_metrics([_evaluated("isRequired", CheckStatus.PASS)], "ds")
+    counts = _by_key(metrics, "fatal_failure_count")
+    assert counts
+    assert all(isinstance(m["value"], str) for m in counts)
+
+
+# --- recommendations render their description's placeholders -------------
+
+
+def test_recommendation_content_renders_placeholders():
+    results = [
+        _evaluated(
+            "isRequired",
+            CheckStatus.FAIL,
+            severity="fatal",
+            table="PERSON",
+            field="person_id",
+            description=("NULLs in @cdmFieldName of @cdmTableName forbidden."),
+        )
+    ]
+    recommendation = build_recommendations(results, "ds")[0]
+    assert "NULLs in PERSON_ID of PERSON forbidden." in (
+        recommendation["content"]
+    )
+    assert "@cdmFieldName" not in recommendation["content"]
+    assert "@cdmTableName" not in recommendation["content"]
+
+
 # --- full-catalog sanity check --------------------------------------------
 
 
@@ -313,8 +499,9 @@ def test_full_catalog_run_produces_a_sane_report(mini_cdm):
         1
         for r in results
         if r.result.status == CheckStatus.FAIL
-        and r.instance.severity == "fatal"
+        and r.instance.severity.strip().lower() == "fatal"
     )
+    table_count = len({r.instance.cdm_table_name for r in results})
 
     metrics = build_metrics(results, "mini_cdm")
     recommendations = build_recommendations(results, "mini_cdm")
@@ -327,7 +514,35 @@ def test_full_catalog_run_produces_a_sane_report(mini_cdm):
     score = _by_key(metrics, "score", "dataset")[0]
     assert 0.0 <= float(score["value"]) <= 1.0
 
+    dataset_fatal_count = _by_key(metrics, "fatal_failure_count", "dataset")[0]
+    assert int(dataset_fatal_count["value"]) == fatal_fail_count
+
+    table_fatal_counts = _by_key(metrics, "fatal_failure_count", "table")
+    assert len(table_fatal_counts) == table_count
+    assert sum(int(m["value"]) for m in table_fatal_counts) == (
+        fatal_fail_count
+    )
+
+    # pct_violated_rows must be table-scoped for table-level checks
+    # (bare table name, no ".") and column-scoped otherwise
+    # (qualified "TABLE.field") -- never "column" carrying a bare
+    # table name.
+    for metric in pct_metrics:
+        if metric["scope"]["perimeter"] == "table":
+            assert "." not in metric["scope"]["value"]
+        else:
+            assert metric["scope"]["perimeter"] == "column"
+            assert "." in metric["scope"]["value"]
+
+    for recommendation in recommendations:
+        content = recommendation["content"]
+        assert "@cdmTableName" not in content
+        assert "@cdmFieldName" not in content
+        assert "@conceptId" not in content
+        assert "@conceptName" not in content
+
     # Metric volume must stay far below one metric per check result:
     # ~2539 results collapse into a small, table/category/dataset
-    # sized set plus one row per failure.
-    assert len(metrics) < 500
+    # sized set (now including fatal_failure_count) plus one row per
+    # failure.
+    assert len(metrics) < 600

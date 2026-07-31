@@ -171,6 +171,103 @@ def test_plausible_unit_concept_ids_is_gated_on_its_threshold():
     assert all(c.threshold > 0 for c in units)
 
 
+def test_concept_level_checks_capture_the_concept_name():
+    # rendered_description needs @conceptId *and* @conceptName to
+    # produce readable recommendations for concept-level checks.
+    catalog = load_catalog("5.4")
+    concept_checks = [
+        c
+        for c in catalog
+        if c.check_name
+        in (
+            "plausibleGender",
+            "plausibleGenderUseDescendants",
+            "plausibleUnitConceptIds",
+        )
+    ]
+    assert concept_checks
+    assert all(c.params.get("conceptName") for c in concept_checks)
+
+
+def test_rendered_description_substitutes_known_placeholders():
+    instance = CheckInstance(
+        check_name="isRequired",
+        check_level="FIELD",
+        cdm_table_name="PERSON",
+        cdm_field_name="person_id",
+        threshold=0.0,
+        severity="fatal",
+        kahn_category="Conformance",
+        description=(
+            "NULLs in @cdmFieldName of @cdmTableName are not allowed."
+        ),
+    )
+    assert instance.rendered_description == (
+        "NULLs in PERSON_ID of PERSON are not allowed."
+    )
+    # description itself, the vendored verbatim text, is untouched
+    assert instance.description == (
+        "NULLs in @cdmFieldName of @cdmTableName are not allowed."
+    )
+
+
+def test_rendered_description_substitutes_concept_placeholders():
+    instance = CheckInstance(
+        check_name="plausibleGender",
+        check_level="CONCEPT",
+        cdm_table_name="CONDITION_OCCURRENCE",
+        cdm_field_name="condition_concept_id",
+        threshold=0.0,
+        severity="characterization",
+        kahn_category="Plausibility",
+        description="Concept @conceptId (@conceptName) looks wrong.",
+        param_items=(
+            ("conceptId", "26662"),
+            ("conceptName", "Pregnant"),
+        ),
+    )
+    assert instance.rendered_description == (
+        "Concept 26662 (Pregnant) looks wrong."
+    )
+
+
+def test_rendered_description_leaves_unknown_tokens_and_missing_values_alone():
+    # A table-level check has no field, so @cdmFieldName has nothing
+    # to substitute with and must be left as a visible, honest token
+    # rather than blanked out. Likewise @plausibleGender is not one
+    # of the four placeholders this pack renders.
+    instance = CheckInstance(
+        check_name="cdmTable",
+        check_level="TABLE",
+        cdm_table_name="PERSON",
+        cdm_field_name=None,
+        threshold=0.0,
+        severity="fatal",
+        kahn_category="Conformance",
+        description="@cdmFieldName of @cdmTableName, gender=@plausibleGender",
+    )
+    assert instance.rendered_description == (
+        "@cdmFieldName of PERSON, gender=@plausibleGender"
+    )
+
+
+def test_no_rendered_recommendation_relevant_description_has_leftover_placeholders():
+    # The four placeholders this pack substitutes must be fully
+    # resolved across the real catalog wherever the instance actually
+    # carries the corresponding value (every instance has a table;
+    # concept-level instances have conceptId/conceptName; field-level
+    # instances have a field).
+    catalog = load_catalog("5.4")
+    for instance in catalog:
+        rendered = instance.rendered_description
+        assert "@cdmTableName" not in rendered
+        if instance.cdm_field_name is not None:
+            assert "@cdmFieldName" not in rendered
+        if instance.check_level == "CONCEPT":
+            assert "@conceptId" not in rendered
+            assert "@conceptName" not in rendered
+
+
 def test_source_value_completeness_carries_its_companion_field():
     catalog = load_catalog("5.4")
     checks = [c for c in catalog if c.check_name == "sourceValueCompleteness"]

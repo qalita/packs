@@ -56,6 +56,18 @@ _DECIDED = (CheckStatus.PASS, CheckStatus.FAIL)
 _HIGH_LEVEL_THRESHOLD_PCT = 20.0
 
 
+def _severity(instance) -> str:
+    """Normalized severity, matched the same way kahn_category is.
+
+    Without this, a miscased or unexpected severity string would
+    silently fall back to weight 1.0 in `_weighted_score` (masking
+    fatal weighting in the score) and would silently fail the
+    fatal-only filter in `build_recommendations` -- both without
+    raising or logging anything.
+    """
+    return instance.severity.strip().lower()
+
+
 def _weighted_score(results: List[EvaluatedCheck]) -> float:
     """Share of passing checks among decided ones, weighted by severity.
 
@@ -70,13 +82,30 @@ def _weighted_score(results: List[EvaluatedCheck]) -> float:
     for evaluated in results:
         if evaluated.result.status not in _DECIDED:
             continue
-        weight = SEVERITY_WEIGHTS.get(evaluated.instance.severity, 1.0)
+        weight = SEVERITY_WEIGHTS.get(_severity(evaluated.instance), 1.0)
         total += weight
         if evaluated.result.status == CheckStatus.PASS:
             passed += weight
     if total == 0.0:
         return 0.0
     return passed / total
+
+
+def _fatal_failure_count(results: List[EvaluatedCheck]) -> int:
+    """Raw count of failing "fatal"-severity checks in `results`.
+
+    The weighted score is a ratio, so a handful of fatal failures can
+    be diluted into a deceptively high score by a large number of
+    passing checks in the same scope (e.g. a wide table with many
+    columns). Surfacing the raw count alongside the score lets a
+    dashboard show "0.75 (11 fatal failures)" instead of just "0.75".
+    """
+    return sum(
+        1
+        for evaluated in results
+        if evaluated.result.status == CheckStatus.FAIL
+        and _severity(evaluated.instance) == "fatal"
+    )
 
 
 def _metric(key: str, value: float, perimeter: str, scope_value: str) -> dict:
@@ -87,6 +116,29 @@ def _metric(key: str, value: float, perimeter: str, scope_value: str) -> dict:
     }
 
 
+def _count_metric(
+    key: str, count: int, perimeter: str, scope_value: str
+) -> dict:
+    return {
+        "key": key,
+        "value": str(count),
+        "scope": {"perimeter": perimeter, "value": scope_value},
+    }
+
+
+def _scope_perimeter_and_value(instance) -> (str, str):
+    """("table", table) for a table-level check (no field), else
+    ("column", "TABLE.field").
+
+    A table-level `CheckInstance.qualified_field` is just the bare
+    table name (see catalog.py), so using it under `perimeter:
+    "column"` would mislabel a table-scoped fact as a column one.
+    """
+    if instance.cdm_field_name is None:
+        return "table", instance.cdm_table_name
+    return "column", instance.qualified_field
+
+
 def build_metrics(
     results: List[EvaluatedCheck], dataset_label: str
 ) -> List[dict]:
@@ -94,12 +146,15 @@ def build_metrics(
 
     Emits, in order:
       - one dataset-level "score" (severity-weighted pass rate over
-        every decided check);
+        every decided check) and "fatal_failure_count" (the raw
+        count behind that ratio -- see `_fatal_failure_count`);
       - one "<category>_score" per Kahn category actually present in
         `results` (conformance/completeness/plausibility);
-      - one table-scoped "score" per CDM table present in `results`;
+      - one table-scoped "score" and "fatal_failure_count" per CDM
+        table present in `results`;
       - one "pct_violated_rows" per *failing* check, scoped to the
-        column (or table, for table-level checks) it failed on.
+        column it failed on ("TABLE.field"), or to the table itself
+        for table-level checks, which have no field.
 
     The last bucket is deliberately the only one that scales with the
     number of results: everything else is bounded by the number of
@@ -107,7 +162,13 @@ def build_metrics(
     checks still turns into a small, dashboard-sized metric list.
     """
     metrics = [
-        _metric("score", _weighted_score(results), "dataset", dataset_label)
+        _metric("score", _weighted_score(results), "dataset", dataset_label),
+        _count_metric(
+            "fatal_failure_count",
+            _fatal_failure_count(results),
+            "dataset",
+            dataset_label,
+        ),
     ]
 
     by_category = defaultdict(list)
@@ -140,16 +201,25 @@ def build_metrics(
                 table_name,
             )
         )
+        metrics.append(
+            _count_metric(
+                "fatal_failure_count",
+                _fatal_failure_count(table_results),
+                "table",
+                table_name,
+            )
+        )
 
     for evaluated in results:
         if evaluated.result.status != CheckStatus.FAIL:
             continue
+        perimeter, scope_value = _scope_perimeter_and_value(evaluated.instance)
         metrics.append(
             _metric(
                 "pct_violated_rows",
                 evaluated.result.pct_violated_rows,
-                "column",
-                evaluated.instance.qualified_field,
+                perimeter,
+                scope_value,
             )
         )
 
@@ -174,18 +244,22 @@ def build_recommendations(
     pct_violated_rows metrics instead, without generating a
     recommendation of their own.
 
-    The content reuses the upstream checkDescription text as
-    remediation guidance, plus the concrete violation counts so each
-    recommendation is self-contained.
+    The content reuses the upstream checkDescription text (with its
+    `@cdmTableName`/`@cdmFieldName`/`@conceptId`/`@conceptName`
+    placeholders rendered to this instance's concrete values -- see
+    `CheckInstance.rendered_description`) as remediation guidance,
+    plus the concrete violation counts so each recommendation is
+    self-contained.
     """
     recommendations = []
     for evaluated in results:
         instance = evaluated.instance
         if evaluated.result.status != CheckStatus.FAIL:
             continue
-        if instance.severity != "fatal":
+        if _severity(instance) != "fatal":
             continue
-        detail = instance.description or instance.check_name
+        detail = instance.rendered_description or instance.check_name
+        perimeter, scope_value = _scope_perimeter_and_value(instance)
         recommendations.append(
             {
                 "content": (
@@ -196,8 +270,8 @@ def build_recommendations(
                 ),
                 "type": "OMOP CDM",
                 "scope": {
-                    "perimeter": "column",
-                    "value": instance.qualified_field,
+                    "perimeter": perimeter,
+                    "value": scope_value,
                     "parent_scope": {
                         "perimeter": "dataset",
                         "value": dataset_label,
