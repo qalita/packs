@@ -2,10 +2,7 @@
   "job": {
     "cdm_version": "5.4",
     "excluded_tables": [],
-    "threshold_overrides": {},
-    "source": {
-      "skip_missing_tables": true
-    }
+    "threshold_overrides": {}
   },
   "charts": {
     "overview": [

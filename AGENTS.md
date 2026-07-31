@@ -54,7 +54,9 @@ cd <pack_directory> && black .
 
 - Each pack is a standalone folder at root level
 - Packs use `qalita_core` as dependency for data access
-- **License** : Include Apache 2.0 header in all new files
+- **License** : New files are proprietary QALITA by default; files deriving from
+  third-party Apache-2.0 material (e.g. vendored OHDSI content) carry that
+  attribution and are listed in the pack's `NOTICE`
 - **Formatter** : Black
 - **Linting** : Pylint, Flake8
 - **Tests** : pytest (when applicable)
@@ -110,4 +112,5 @@ packs/
 - ❌ Do not modify existing pack structure without understanding user impact
 - ✅ New packs must follow existing pack structure
 - ✅ Document inputs/outputs of each pack
-- ✅ Include Apache 2.0 license header in new files
+- ✅ New files are proprietary QALITA by default; attribute and list in `NOTICE`
+  any file deriving from third-party Apache-2.0 material

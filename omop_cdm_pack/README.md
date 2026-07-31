@@ -12,7 +12,8 @@ Everything runs in Polars, lazily and in streaming mode. No R, no JVM, no SQL pu
 
 Point the source at a schema holding OMOP CDM tables. The pack reads the CDM
 specification to decide which tables to look for; tables absent from the source are
-reported as failures of the `cdmTable` check rather than crashing the run.
+reported as failures of the `cdmTable` check rather than crashing the run. This is
+unconditional — there is no config option to make a missing table fail the job instead.
 
 The OMOP vocabulary tables (`CONCEPT`, `CONCEPT_ANCESTOR`) are **optional**. When they
 are absent, the seven check types that need them are reported as `Not Applicable`.
