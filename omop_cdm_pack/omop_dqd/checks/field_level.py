@@ -364,13 +364,26 @@ def plausible_after_birth(ctx, chk) -> CheckResult:
 
 
 def _death_dates(ctx) -> pl.LazyFrame:
+    """DEATH rows keyed by person_id, death_date left possibly null.
+
+    Only person_id is required to be non-null (a null person_id can
+    never join to anything, in SQL or here). death_date is
+    deliberately NOT dropped: neither upstream denominator subquery
+    requires it -- field_plausible_before_death.sql's denominator
+    only filters on the *checked field*, and field_plausible_during_
+    life.sql's denominator only tests person_id membership. A DEATH
+    row with a null death_date still means that person is dead and
+    still belongs in both denominators; only the *violated-rows*
+    comparison against death_date naturally excludes it (NULL
+    comparisons are falsy in both SQL and Polars).
+    """
     return (
         ctx.table("DEATH")
         .select(
             pl.col("person_id"),
             pl.col("death_date").cast(pl.Date),
         )
-        .drop_nulls()
+        .drop_nulls(subset=["person_id"])
     )
 
 
@@ -383,7 +396,8 @@ def plausible_before_death(ctx, chk) -> CheckResult:
     DATEADD(day, 60, de.death_date)`` -- a 60-day grace period, not a
     bare ``> death_date``. Its denominator subquery re-joins DEATH and
     filters ``cdmTable.@cdmFieldName IS NOT NULL``, so only rows
-    belonging to a person who died, with a populated date, count.
+    belonging to a person who died, with a *non-null checked field*,
+    count -- a null death_date does not exclude the row.
     """
     skip = guard(ctx, chk)
     if skip:

@@ -6,6 +6,8 @@ several diverge from a literal reading of the plan this task started
 from -- see the comments on each test for the deciding SQL line.
 """
 
+import datetime as dt
+
 import polars as pl
 
 import omop_dqd.checks  # noqa: F401
@@ -108,6 +110,71 @@ def test_plausible_before_death_detects_the_post_mortem_event(
     assert result.num_denominator_rows == 1
 
 
+def test_plausible_before_death_null_death_date_still_counts(tmp_path):
+    # field_plausible_before_death.sql's denominator subquery joins
+    # DEATH unconditionally and filters only on the *checked field*
+    # being non-null:
+    #   JOIN @cdmDatabaseSchema.death ON death.person_id = cdmTable.person_id
+    #   WHERE cdmTable.@cdmFieldName IS NOT NULL
+    # It never requires death_date itself to be non-null. A DEATH row
+    # with a null death_date still means the person died, and their
+    # rows still belong in the denominator (they simply can never be
+    # counted as violated, since NULL > anything is falsy). Dropping
+    # such rows before the join -- which an earlier version of this
+    # check did -- would silently undercount the denominator.
+    ctx = _write_tables(
+        tmp_path,
+        DEATH=pl.DataFrame({"person_id": [6], "death_date": [None]}),
+        CONDITION_OCCURRENCE=pl.DataFrame(
+            {"person_id": [6], "condition_start_date": ["2020-01-01"]}
+        ).with_columns(pl.col("condition_start_date").str.to_date()),
+    )
+    result = _run(
+        ctx,
+        "plausibleBeforeDeath",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.num_denominator_rows == 1
+    assert result.num_violated_rows == 0
+
+
+def test_plausible_before_death_pins_the_sixty_day_grace_period(
+    tmp_path,
+):
+    # An event 59 days after death must NOT violate; one 61 days
+    # after death must. This pins the grace window at exactly 60
+    # days rather than merely proving some grace exists -- deleting
+    # the DATEADD(day, 60, ...) offset entirely would flag the day-59
+    # event too, and a much wider offset (e.g. 90 days) would fail to
+    # flag the day-61 event.
+    death_date = dt.date(2020, 1, 1)
+    ctx = _write_tables(
+        tmp_path,
+        DEATH=pl.DataFrame(
+            {"person_id": [1], "death_date": [death_date.isoformat()]}
+        ).with_columns(pl.col("death_date").str.to_date()),
+        CONDITION_OCCURRENCE=pl.DataFrame(
+            {
+                "person_id": [1, 1, 1],
+                "condition_start_date": [
+                    (death_date + dt.timedelta(days=30)).isoformat(),
+                    (death_date + dt.timedelta(days=59)).isoformat(),
+                    (death_date + dt.timedelta(days=61)).isoformat(),
+                ],
+            }
+        ).with_columns(pl.col("condition_start_date").str.to_date()),
+    )
+    result = _run(
+        ctx,
+        "plausibleBeforeDeath",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.num_denominator_rows == 3
+    assert result.num_violated_rows == 1
+
+
 def test_plausible_during_life_matches_before_death_in_this_fixture(
     mini_cdm,
 ):
@@ -173,6 +240,61 @@ def test_plausible_during_life_denominator_differs_from_before_death(
     assert before_death.num_violated_rows == 1
 
 
+def test_plausible_during_life_null_death_date_still_counts(tmp_path):
+    # field_plausible_during_life.sql's denominator only tests
+    #   person_id IN (SELECT person_id FROM death)
+    # -- it never looks at death_date at all, so a null death_date
+    # must not shrink the denominator any more than it would for
+    # plausibleBeforeDeath (see the sibling test above it).
+    ctx = _write_tables(
+        tmp_path,
+        DEATH=pl.DataFrame({"person_id": [6], "death_date": [None]}),
+        CONDITION_OCCURRENCE=pl.DataFrame(
+            {"person_id": [6], "condition_start_date": ["2020-01-01"]}
+        ).with_columns(pl.col("condition_start_date").str.to_date()),
+    )
+    result = _run(
+        ctx,
+        "plausibleDuringLife",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.num_denominator_rows == 1
+    assert result.num_violated_rows == 0
+
+
+def test_plausible_during_life_pins_the_sixty_day_grace_period(
+    tmp_path,
+):
+    # Same boundary pin as plausibleBeforeDeath: 59 days after death
+    # must NOT violate, 61 days after death must.
+    death_date = dt.date(2020, 1, 1)
+    ctx = _write_tables(
+        tmp_path,
+        DEATH=pl.DataFrame(
+            {"person_id": [1], "death_date": [death_date.isoformat()]}
+        ).with_columns(pl.col("death_date").str.to_date()),
+        CONDITION_OCCURRENCE=pl.DataFrame(
+            {
+                "person_id": [1, 1, 1],
+                "condition_start_date": [
+                    (death_date + dt.timedelta(days=30)).isoformat(),
+                    (death_date + dt.timedelta(days=59)).isoformat(),
+                    (death_date + dt.timedelta(days=61)).isoformat(),
+                ],
+            }
+        ).with_columns(pl.col("condition_start_date").str.to_date()),
+    )
+    result = _run(
+        ctx,
+        "plausibleDuringLife",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.num_denominator_rows == 3
+    assert result.num_violated_rows == 1
+
+
 def test_within_visit_dates_counts_the_out_of_window_events(mini_cdm):
     # Rows 101 and 102 (visit 10, window 2015-01-01..2015-01-05) and
     # row 103 (visit 12, window 2017-01-01..2017-01-05) all fall
@@ -191,13 +313,13 @@ def test_within_visit_dates_counts_the_out_of_window_events(mini_cdm):
     assert result.num_denominator_rows == 6
 
 
-def test_within_visit_dates_honours_the_seven_day_grace_period(
-    tmp_path,
-):
-    # An event 3 days before visit_start_date is inside upstream's
-    # +/-7 day grace window and must NOT be flagged -- a naive
-    # "date must be inside [start, end]" implementation would wrongly
-    # flag it.
+def test_within_visit_dates_pins_the_seven_day_grace_period(tmp_path):
+    # An event 6 days before visit_start_date is inside upstream's
+    # +/-7 day grace window and must NOT be flagged; one 8 days
+    # before must be. This pins the grace width at exactly 7 days --
+    # a naive "date must be inside [start, end]" implementation
+    # (0-day grace) would flag both, and an accidentally wider grace
+    # (e.g. 10 days) would flag neither.
     ctx = _write_tables(
         tmp_path,
         VISIT_OCCURRENCE=pl.DataFrame(
@@ -213,9 +335,9 @@ def test_within_visit_dates_honours_the_seven_day_grace_period(
         ),
         CONDITION_OCCURRENCE=pl.DataFrame(
             {
-                "person_id": [1],
-                "condition_start_date": ["2020-01-07"],
-                "visit_occurrence_id": [1],
+                "person_id": [1, 1],
+                "condition_start_date": ["2020-01-04", "2020-01-02"],
+                "visit_occurrence_id": [1, 1],
             }
         ).with_columns(pl.col("condition_start_date").str.to_date()),
     )
@@ -226,8 +348,8 @@ def test_within_visit_dates_honours_the_seven_day_grace_period(
         "CONDITION_OCCURRENCE",
         "condition_start_date",
     )
-    assert result.num_violated_rows == 0
-    assert result.num_denominator_rows == 1
+    assert result.num_violated_rows == 1
+    assert result.num_denominator_rows == 2
 
 
 def test_plausible_temporal_after_same_table(mini_cdm):
