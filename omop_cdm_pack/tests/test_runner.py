@@ -563,3 +563,85 @@ def test_gate_without_measure_value_completeness_leaves_results_alone():
     # ... but without measureValueCompleteness in the batch, nothing
     # gets reclassified.
     assert results["bareCheckForTest"].status == CheckStatus.PASS
+
+
+def test_plausible_before_death_passes_when_death_is_present_but_empty(
+    tmp_path,
+):
+    """Regression test for the scenario that motivated Revision 2.
+
+    plausibleBeforeDeath's denominator comes from an INNER JOIN with
+    DEATH -- a table *other than* its own CONDITION_OCCURRENCE. Its
+    own guard() only checks that CONDITION_OCCURRENCE's table/field
+    exist, and plausible_before_death() separately checks that DEATH
+    exists at all -- but neither checks whether DEATH is *empty*. A
+    present-but-empty DEATH table is entirely ordinary (a CDM extract
+    with no recorded deaths), so this must PASS with a zero
+    denominator, not become NOT_APPLICABLE.
+
+    Before Revision 2, evaluate.py's blanket zero-denominator rule
+    reported NOT_APPLICABLE here regardless of *why* the denominator
+    was zero. No rule in the reclassification pass fires instead:
+    rule 6 ("table empty") only ever looks at the check's *own* table
+    (CONDITION_OCCURRENCE, which is healthy here) -- DEATH's
+    emptiness is invisible to it, exactly as upstream's tableIsEmpty
+    is scoped per check row's own cdmTableName, not a table it merely
+    joins against. Only measureConditionEraCompleteness gets a
+    dedicated foreign-table special case upstream; plausibleBeforeDeath
+    does not.
+    """
+    person = pl.DataFrame(
+        {"person_id": [1, 2]}, schema={"person_id": pl.Int64}
+    )
+    condition_occurrence = pl.DataFrame(
+        {
+            "condition_occurrence_id": [10, 11],
+            "person_id": [1, 2],
+            "condition_start_date": ["2020-01-01", "2020-02-01"],
+        },
+        schema={
+            "condition_occurrence_id": pl.Int64,
+            "person_id": pl.Int64,
+            "condition_start_date": pl.Utf8,
+        },
+    ).with_columns(pl.col("condition_start_date").str.to_date())
+    death = pl.DataFrame(
+        {"person_id": [], "death_date": []},
+        schema={"person_id": pl.Int64, "death_date": pl.Date},
+    )
+
+    person_path = tmp_path / "person.parquet"
+    condition_path = tmp_path / "condition_occurrence.parquet"
+    death_path = tmp_path / "death.parquet"
+    person.write_parquet(person_path)
+    condition_occurrence.write_parquet(condition_path)
+    death.write_parquet(death_path)
+
+    ctx = CdmContext.from_paths(
+        {
+            "PERSON": [str(person_path)],
+            "CONDITION_OCCURRENCE": [str(condition_path)],
+            "DEATH": [str(death_path)],
+        }
+    )
+
+    catalog = [
+        _table_instance("cdmTable", "CONDITION_OCCURRENCE"),
+        _instance("cdmField", "CONDITION_OCCURRENCE", "condition_start_date"),
+        _instance(
+            "measureValueCompleteness",
+            "CONDITION_OCCURRENCE",
+            "condition_start_date",
+        ),
+        _instance(
+            "plausibleBeforeDeath",
+            "CONDITION_OCCURRENCE",
+            "condition_start_date",
+        ),
+    ]
+    results = {
+        r.instance.check_name: r.result for r in run_checks(ctx, catalog)
+    }
+    result = results["plausibleBeforeDeath"]
+    assert result.status == CheckStatus.PASS
+    assert result.num_denominator_rows == 0

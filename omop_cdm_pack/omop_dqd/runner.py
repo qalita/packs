@@ -177,10 +177,25 @@ def _reclassify(
 
     Only ever called with a PASS/FAIL result (see
     _apply_not_applicable_rules): ERROR and any check's own
-    NOT_APPLICABLE never reach here, matching upstream rule 5
-    ("errors not related to a missing table or field should not be
-    marked NA") and the requirement to never convert NOT_APPLICABLE
-    back to pass/fail.
+    NOT_APPLICABLE never reach here.
+
+    NOT_APPLICABLE is never converted back to pass/fail, matching
+    upstream. ERROR, however, is a deliberate divergence, not a
+    faithful reproduction of rule 5. Upstream's rule 4 (table or field
+    missing -> NA) applies to *every* row, including one where
+    isError == 1; only afterwards does rule 5 look at isError, and by
+    then a missing-table-or-field error may already have been
+    reclassified NA. Filtering ERROR out before this function ever
+    runs (see _apply_not_applicable_rules) means that precedence can
+    never fire here: a check that errors *and* whose table is missing
+    stays ERROR in this port, where upstream would report
+    NOT_APPLICABLE. This is intentional -- in this port a missing
+    table almost always makes a check return NOT_APPLICABLE through
+    its own ctx.has_table guard rather than raising, so the case is
+    close to unreachable in practice, and preserving a genuine error
+    as ERROR is more useful to a QALITA user than silently
+    reclassifying it -- but it is a known, deliberate departure from
+    upstream's literal rule ordering, not an equivalent of it.
     """
     check_name = instance.check_name
     table = instance.cdm_table_name
@@ -223,10 +238,10 @@ def _reclassify(
     if field is not None and lookups.field_is_missing(table, field):
         return not_applicable(f"Field {table}.{field} does not exist.")
 
-    # Rule 5: an error not caused by a missing table or field is not
-    # NA -- errors stay errors. Nothing to do here: only PASS/FAIL
-    # results reach this function in the first place (see
-    # _apply_not_applicable_rules).
+    # Rule 5: nothing to do here -- only PASS/FAIL results reach this
+    # function (see _apply_not_applicable_rules). This is a
+    # deliberate divergence from upstream's literal ordering, not a
+    # faithful reproduction of rule 5; see this function's docstring.
 
     # Rule 6: table empty -> NA.
     if lookups.table_is_empty(table):
