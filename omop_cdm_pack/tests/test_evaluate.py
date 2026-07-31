@@ -56,9 +56,17 @@ def test_threshold_boundary_is_inclusive():
     assert result.status == CheckStatus.PASS
 
 
-def test_empty_denominator_is_not_applicable():
+def test_empty_denominator_with_no_violations_passes():
+    # evaluate() does not inspect the denominator at all: upstream's
+    # R/evaluateThresholds.R decides `failed` purely from the
+    # threshold and numViolatedRows, so 0 violations over a 0
+    # denominator is a pass here. Applicability (whether this should
+    # instead be reported NOT_APPLICABLE because the underlying table
+    # or field is missing or empty) is decided afterwards, over the
+    # whole batch of results, by omop_dqd.runner -- not by this
+    # per-check function.
     result = evaluate(_instance(threshold=0.0), counted(0, 0))
-    assert result.status == CheckStatus.NOT_APPLICABLE
+    assert result.status == CheckStatus.PASS
 
 
 def test_not_applicable_survives_evaluation():
