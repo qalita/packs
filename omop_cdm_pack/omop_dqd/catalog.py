@@ -24,22 +24,40 @@ TRIGGER_VALUE = "value"
 
 @dataclass(frozen=True)
 class CheckSpec:
-    """How one check column of a metadata CSV instantiates checks."""
+    """How one check column of a metadata CSV instantiates checks.
+
+    trigger_column  column that gates instantiation; defaults to `name`
+    value_column    column supplying params["value"]; defaults to `name`
+    trigger_equals  for TRIGGER_VALUE, the cell must equal this
+                    (case-insensitive) rather than merely be non-empty
+    requires        prerequisite (column, value) pairs, all of which
+                    must hold for the check to instantiate
+
+    These exist to express Check_Descriptions.csv's `evaluationFilter`
+    column declaratively for the handful of checks whose filter is
+    not equivalent to the plain trigger mode. There is no general
+    expression interpreter: the four exceptions are hardcoded per
+    spec below, auditable against the CSV column.
+    """
 
     name: str
     trigger: str
     param_columns: Tuple[str, ...] = ()
+    trigger_column: Optional[str] = None
+    value_column: Optional[str] = None
+    trigger_equals: Optional[str] = None
+    requires: Tuple[Tuple[str, str], ...] = ()
 
 
 # Field-level checks, in the order they appear in Check_Descriptions.csv.
 FIELD_CHECK_SPECS: Tuple[CheckSpec, ...] = (
     CheckSpec("cdmField", TRIGGER_ALWAYS),
     CheckSpec("isRequired", TRIGGER_YES),
-    CheckSpec("cdmDatatype", TRIGGER_VALUE),
+    CheckSpec("cdmDatatype", TRIGGER_VALUE, trigger_equals="integer"),
     CheckSpec("isPrimaryKey", TRIGGER_YES),
     CheckSpec("isForeignKey", TRIGGER_YES, ("fkTableName", "fkFieldName")),
-    CheckSpec("fkDomain", TRIGGER_VALUE),
-    CheckSpec("fkClass", TRIGGER_VALUE),
+    CheckSpec("fkDomain", TRIGGER_VALUE, requires=(("isForeignKey", "Yes"),)),
+    CheckSpec("fkClass", TRIGGER_VALUE, requires=(("isForeignKey", "Yes"),)),
     CheckSpec("isStandardValidConcept", TRIGGER_YES),
     CheckSpec("measureValueCompleteness", TRIGGER_YES),
     CheckSpec("standardConceptRecordCompleteness", TRIGGER_YES),
@@ -48,7 +66,11 @@ FIELD_CHECK_SPECS: Tuple[CheckSpec, ...] = (
         TRIGGER_YES,
         ("standardConceptFieldName",),
     ),
-    CheckSpec("sourceValueCompleteness", TRIGGER_YES),
+    CheckSpec(
+        "sourceValueCompleteness",
+        TRIGGER_YES,
+        param_columns=("standardConceptFieldName",),
+    ),
     CheckSpec("plausibleValueLow", TRIGGER_VALUE),
     CheckSpec("plausibleValueHigh", TRIGGER_VALUE),
     CheckSpec(
@@ -85,7 +107,17 @@ TABLE_CHECK_SPECS: Tuple[CheckSpec, ...] = (
 CONCEPT_CHECK_SPECS: Tuple[CheckSpec, ...] = (
     CheckSpec("plausibleGender", TRIGGER_VALUE, ("conceptId",)),
     CheckSpec("plausibleGenderUseDescendants", TRIGGER_VALUE, ("conceptId",)),
-    CheckSpec("plausibleUnitConceptIds", TRIGGER_VALUE, ("conceptId",)),
+    # The evaluationFilter for this check is
+    # `plausibleUnitConceptIdsThreshold!=''`: the gate is the
+    # threshold column, but the payload consumed by Task 9 is the
+    # unit concept id list in plausibleUnitConceptIds itself.
+    CheckSpec(
+        "plausibleUnitConceptIds",
+        TRIGGER_VALUE,
+        param_columns=("conceptId",),
+        trigger_column="plausibleUnitConceptIdsThreshold",
+        value_column="plausibleUnitConceptIds",
+    ),
 )
 
 
@@ -162,16 +194,26 @@ def _parse_threshold(row: Dict[str, str], check_name: str) -> float:
 
 
 def _collect_params(
-    row: Dict[str, str], spec: CheckSpec, cell: str
+    row: Dict[str, str], spec: CheckSpec, value_cell: str
 ) -> Tuple[Tuple[str, str], ...]:
     params = {}
     if spec.trigger == TRIGGER_VALUE:
-        params["value"] = cell
+        params["value"] = value_cell
     for column in spec.param_columns:
         value = (row.get(column) or "").strip()
         if value:
             params[column] = value
     return tuple(sorted(params.items()))
+
+
+def _requirements_met(
+    row: Dict[str, str], requires: Tuple[Tuple[str, str], ...]
+) -> bool:
+    for column, expected in requires:
+        actual = (row.get(column) or "").strip()
+        if actual.lower() != expected.lower():
+            return False
+    return True
 
 
 def _instantiate(
@@ -189,14 +231,25 @@ def _instantiate(
         if field_column:
             field_name = (row.get(field_column) or "").strip() or None
         for spec in specs:
-            cell = (row.get(spec.name) or "").strip()
-            if spec.trigger == TRIGGER_YES and cell.lower() != "yes":
+            if not _requirements_met(row, spec.requires):
                 continue
-            if spec.trigger == TRIGGER_VALUE and not cell:
+            gate_column = spec.trigger_column or spec.name
+            gate_cell = (row.get(gate_column) or "").strip()
+            if spec.trigger == TRIGGER_YES and gate_cell.lower() != "yes":
                 continue
+            if spec.trigger == TRIGGER_VALUE:
+                if not gate_cell:
+                    continue
+                if (
+                    spec.trigger_equals is not None
+                    and gate_cell.lower() != spec.trigger_equals.lower()
+                ):
+                    continue
             description = descriptions.get(spec.name)
             if description is None:
                 continue
+            value_column = spec.value_column or spec.name
+            value_cell = (row.get(value_column) or "").strip()
             instances.append(
                 CheckInstance(
                     check_name=spec.name,
@@ -209,7 +262,7 @@ def _instantiate(
                     severity=description.severity,
                     kahn_category=description.kahn_category,
                     description=description.description,
-                    param_items=_collect_params(row, spec, cell),
+                    param_items=_collect_params(row, spec, value_cell),
                 )
             )
     return instances

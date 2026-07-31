@@ -17,14 +17,13 @@ def test_descriptions_are_keyed_by_check_name():
 
 
 def test_catalog_instantiates_thousands_of_checks():
-    # The task brief estimated >3000 instances for CDM 5.4. Measured
-    # against the actual vendored CSVs (byte-identical to upstream
-    # OHDSI DataQualityDashboard), the real count is 2757 for 5.4 and
-    # 2163 for 5.3 with the algorithm below. The estimate was rough;
-    # the threshold here is set below both real, verified counts
-    # while still asserting the catalog is in the thousands.
-    catalog = load_catalog("5.4")
-    assert len(catalog) > 2000
+    # Exact, measured post-revision counts (revision 1 gates cdmDatatype,
+    # fkDomain, fkClass and plausibleUnitConceptIds on their real
+    # evaluationFilter, per docs/superpowers/plans/2026-07-31-omop-cdm-pack-revision-1.md).
+    # A loose lower bound would not catch a quarter of the catalog
+    # silently vanishing, so these are pinned exactly.
+    assert len(load_catalog("5.4")) == 2539
+    assert len(load_catalog("5.3")) == 2021
 
 
 def test_every_instance_carries_a_known_severity():
@@ -116,3 +115,62 @@ def test_unsupported_cdm_version_is_rejected():
 def test_both_supported_versions_load():
     assert load_catalog("5.3")
     assert load_catalog("5.4")
+
+
+def test_cdm_datatype_is_instantiated_only_for_integer_fields():
+    catalog = load_catalog("5.4")
+    datatypes = {
+        c.params["value"].lower()
+        for c in catalog
+        if c.check_name == "cdmDatatype"
+    }
+    assert datatypes == {"integer"}
+
+
+def test_fk_domain_requires_the_field_to_be_a_foreign_key():
+    catalog = load_catalog("5.4")
+    fk_fields = {
+        (c.cdm_table_name, c.cdm_field_name)
+        for c in catalog
+        if c.check_name == "isForeignKey"
+    }
+    domain_fields = {
+        (c.cdm_table_name, c.cdm_field_name)
+        for c in catalog
+        if c.check_name == "fkDomain"
+    }
+    assert domain_fields
+    assert domain_fields <= fk_fields
+
+
+def test_fk_class_requires_the_field_to_be_a_foreign_key():
+    catalog = load_catalog("5.4")
+    fk_fields = {
+        (c.cdm_table_name, c.cdm_field_name)
+        for c in catalog
+        if c.check_name == "isForeignKey"
+    }
+    class_fields = {
+        (c.cdm_table_name, c.cdm_field_name)
+        for c in catalog
+        if c.check_name == "fkClass"
+    }
+    assert class_fields
+    assert class_fields <= fk_fields
+
+
+def test_plausible_unit_concept_ids_is_gated_on_its_threshold():
+    catalog = load_catalog("5.4")
+    units = [c for c in catalog if c.check_name == "plausibleUnitConceptIds"]
+    assert units
+    # the gate is the threshold column, but the payload is the id list
+    assert all(c.params["value"] for c in units)
+    assert all(c.params["conceptId"] for c in units)
+    assert all(c.threshold > 0 for c in units)
+
+
+def test_source_value_completeness_carries_its_companion_field():
+    catalog = load_catalog("5.4")
+    checks = [c for c in catalog if c.check_name == "sourceValueCompleteness"]
+    assert checks
+    assert all(c.params.get("standardConceptFieldName") for c in checks)
