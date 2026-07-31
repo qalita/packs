@@ -4,6 +4,7 @@ docker-compose.yml
 metrics.json
 recommendations.json
 schemas.json
+figures.json
 source_conf.json
 *.html
 *_report.json
@@ -11,6 +12,7 @@ source_conf.json
 *_metrics.json
 *_recommendations.json
 *_schemas.json
+*_figures.json
 *.log
 *requirements.txt
 *.csv

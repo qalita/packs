@@ -153,6 +153,28 @@ def _load_parquet_with_sampling(paths, max_rows=None, sample_fraction=None):
 # Pour un fichier : pack.load_data("source")
 # Pour une base : pack.load_data("source", table_or_query="ma_table")
 with Pack() as pack:
+    #########################################################
+    ## Figures — agrégats qui expliquent les métriques
+    pack.figures.declare_measure(
+        "p_cells_missing",
+        unit="ratio",
+        direction="lower_is_better",
+        target=0.05,
+        warn=0.10,
+        label="Taux de cellules manquantes",
+    )
+    pack.figures.declare_measure(
+        "p_missing",
+        unit="ratio",
+        direction="lower_is_better",
+        target=0.05,
+        warn=0.10,
+        label="Taux de valeurs manquantes",
+    )
+    pack.figures.declare_measure(
+        "n_columns", unit="count", direction="neutral", label="Colonnes"
+    )
+
     if pack.source_config.get("type") == "database":
         # On récupère la table ou la requête depuis la config ou on la demande explicitement
         table_or_query = pack.source_config.get("config", {}).get(
@@ -415,6 +437,50 @@ with Pack() as pack:
                     }
                     pack.metrics.data.append(entry)
 
+        # --- Figures du dataset courant
+        if not treat_chunks_as_one:
+            # Ventilation des manquants par colonne : ce qui explique p_cells_missing.
+            missing_rows = [
+                {
+                    "column": variable_name,
+                    "p_missing": float(attributes.get("p_missing", 0) or 0),
+                }
+                for variable_name, attributes in variables_data.items()
+            ]
+            missing_rows = [
+                row for row in missing_rows if row["p_missing"] > 0
+            ]
+            if missing_rows:
+                pack.figures.add(
+                    "missing_by_column",
+                    intent="breakdown",
+                    of="p_cells_missing",
+                    frame=missing_rows,
+                    dims=["column"],
+                    measures=["p_missing"],
+                    scope={"perimeter": "dataset", "value": dataset_name},
+                    title="Valeurs manquantes par colonne",
+                )
+
+            # Répartition des types de colonnes : une composition, pas une ventilation.
+            type_counts = {}
+            for attributes in variables_data.values():
+                type_name = str(attributes.get("type", "inconnu"))
+                type_counts[type_name] = type_counts.get(type_name, 0) + 1
+            if type_counts:
+                pack.figures.add(
+                    "column_types",
+                    intent="composition",
+                    frame=[
+                        {"type": k, "n_columns": v}
+                        for k, v in sorted(type_counts.items())
+                    ],
+                    dims=["type"],
+                    measures=["n_columns"],
+                    scope={"perimeter": "dataset", "value": dataset_name},
+                    title="Répartition des types de colonnes",
+                )
+
         ############################  Advanced Statistics (percentiles, stddev, variance)
         # Compute advanced statistics for numeric columns
         numeric_cols = df.select_dtypes(include=[np.number]).columns
@@ -651,3 +717,4 @@ with Pack() as pack:
     pack.metrics.save()
     pack.recommendations.save()
     pack.schemas.save()
+    pack.figures.save()
