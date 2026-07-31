@@ -16,6 +16,10 @@ Reimplements in Polars:
   inst/sql/sql_server/field_plausible_during_life.sql
   inst/sql/sql_server/field_plausible_temporal_after.sql
   inst/sql/sql_server/field_within_visit_dates.sql
+  inst/sql/sql_server/field_fk_domain.sql
+  inst/sql/sql_server/field_fk_class.sql
+  inst/sql/sql_server/field_is_standard_valid_concept.sql
+  inst/sql/sql_server/field_concept_record_completeness.sql
 See the NOTICE file at the pack root.
 """
 
@@ -569,3 +573,242 @@ def within_visit_dates(ctx, chk) -> CheckResult:
         joined.filter((event < early_bound) | (event > late_bound))
     )
     return counted(violated, total)
+
+
+# --- Vocabulary family -----------------------------------------------
+#
+# fkDomain, fkClass and isStandardValidConcept join CONCEPT directly
+# and must degrade to NOT_APPLICABLE when it is absent.
+# standardConceptRecordCompleteness and sourceConceptRecordCompleteness
+# are the exception: their shared template, field_concept_record_
+# completeness.sql, never references CONCEPT at all -- see
+# _concept_record_completeness below -- so they use guard(), not
+# _vocabulary_guard().
+
+
+def _vocabulary_guard(ctx, chk) -> Optional[CheckResult]:
+    """guard(), plus degrading to NOT_APPLICABLE without CONCEPT."""
+    skip = guard(ctx, chk)
+    if skip:
+        return skip
+    if not ctx.has_table("CONCEPT"):
+        return not_applicable(
+            "the OMOP vocabulary (CONCEPT) is absent from the source"
+        )
+    return None
+
+
+def _concept_attribute(ctx, attribute: str) -> pl.LazyFrame:
+    """CONCEPT reduced to a join key plus one renamed attribute column."""
+    return ctx.table("CONCEPT").select(
+        pl.col("concept_id").alias("_concept_id"),
+        pl.col(attribute).alias("_attribute"),
+    )
+
+
+def _domain_or_class_violation(
+    ctx, chk, attribute: str, expected: str
+) -> CheckResult:
+    """Rows whose *matched* concept carries the wrong domain/class.
+
+    field_fk_domain.sql and field_fk_class.sql share this shape: a
+    LEFT JOIN to CONCEPT, with violated rows filtered by
+    ``co.concept_id != 0 AND co.domain_id NOT IN ('@fkDomain')``
+    (field_fk_class.sql: ``co.concept_class_id != '@fkClass'``).
+    Because the join is a LEFT JOIN, a concept id absent from CONCEPT
+    -- or literally 0 -- produces a NULL co.concept_id on that row;
+    SQL's ``NULL != 0`` is unknown, not true, so the WHERE clause
+    drops it. An orphan or sentinel-0 concept id is therefore NOT a
+    violation of this check -- only a concept that genuinely exists in
+    CONCEPT with the wrong domain/class is.
+
+    The denominator subquery has no WHERE clause at all
+    (``SELECT COUNT_BIG(*) FROM @schema.@cdmTableName cdmTable``): it
+    is the table's full row count, not restricted to non-null field
+    values.
+
+    The join uses ``coalesce=False`` so the matched concept id survives
+    as its own column even when NULL (unmatched) -- Polars' default
+    join behaviour merges same-role join key columns away, which would
+    make an orphan (non-null field, no match) indistinguishable from a
+    genuine match.
+    """
+    field = chk.cdm_field_name
+    frame = ctx.table(chk.cdm_table_name)
+    total = _row_count(frame)
+    joined = frame.join(
+        _concept_attribute(ctx, attribute),
+        left_on=field,
+        right_on="_concept_id",
+        how="left",
+        coalesce=False,
+    )
+    violated_pred = (
+        pl.col("_concept_id").is_not_null()
+        & (pl.col("_concept_id") != 0)
+        & (pl.col("_attribute") != expected)
+    )
+    return counted(_row_count(joined.filter(violated_pred)), total)
+
+
+@register("fkDomain")
+def fk_domain(ctx, chk) -> CheckResult:
+    skip = _vocabulary_guard(ctx, chk)
+    if skip:
+        return skip
+    expected = chk.params.get("value", "")
+    return _domain_or_class_violation(ctx, chk, "domain_id", expected)
+
+
+@register("fkClass")
+def fk_class(ctx, chk) -> CheckResult:
+    skip = _vocabulary_guard(ctx, chk)
+    if skip:
+        return skip
+    expected = chk.params.get("value", "")
+    return _domain_or_class_violation(ctx, chk, "concept_class_id", expected)
+
+
+@register("isStandardValidConcept")
+def is_standard_valid_concept(ctx, chk) -> CheckResult:
+    """Non-null concept ids that fail to resolve to a standard, valid concept.
+
+    field_is_standard_valid_concept.sql INNER JOINs CONCEPT -- unlike
+    fkDomain/fkClass's LEFT JOIN. A concept id absent from CONCEPT
+    therefore produces no row at all in the join, so it can never be
+    counted as a violation: this check only flags concept ids that ARE
+    found in CONCEPT but are non-standard, invalid, or (defensively,
+    matching the SQL's ``co.concept_id != 0``) the literal sentinel 0.
+
+    Its denominator, unlike fkDomain/fkClass, filters on
+    ``cdmTable.@cdmFieldName IS NOT NULL`` over the CDM table directly
+    -- so an orphan concept id IS counted in the denominator, while
+    being structurally unable to ever appear as violated.
+    """
+    skip = _vocabulary_guard(ctx, chk)
+    if skip:
+        return skip
+    field = chk.cdm_field_name
+    column = pl.col(field)
+    denominator_frame = ctx.table(chk.cdm_table_name).filter(
+        column.is_not_null()
+    )
+    total = _row_count(denominator_frame)
+    concept = ctx.table("CONCEPT").select(
+        pl.col("concept_id"),
+        pl.col("standard_concept").alias("_standard"),
+        pl.col("invalid_reason").alias("_invalid"),
+    )
+    joined = ctx.table(chk.cdm_table_name).join(
+        concept, left_on=field, right_on="concept_id", how="inner"
+    )
+    violated_pred = (column != 0) & (
+        (pl.col("_standard") != "S")
+        | pl.col("_invalid").is_not_null()
+        | pl.col("_standard").is_null()
+    )
+    violated = _row_count(joined.filter(violated_pred))
+    return counted(violated, total)
+
+
+# field name (lower) -> companion @xxx_source_value column consulted
+# by field_concept_record_completeness.sql's non-required-field
+# extension clauses, e.g.
+#   {@cdmFieldName == 'ROUTE_CONCEPT_ID'}?{OR (cdmTable.@cdmFieldName
+#   IS NULL AND cdmTable.route_source_value IS NOT NULL)}
+# A concept id field absent from this mapping (and from the two
+# table-conditional cases handled separately in
+# _record_completeness_source_field) only has the bare ``= 0`` rule
+# applied to it.
+_RECORD_COMPLETENESS_SOURCE_VALUE_FIELDS = {
+    "admitted_from_concept_id": "admitted_from_source_value",
+    "admitting_source_concept_id": "admitting_source_value",
+    "discharged_to_concept_id": "discharged_to_source_value",
+    "discharge_to_concept_id": "discharge_to_source_value",
+    "condition_status_concept_id": "condition_status_source_value",
+    "modifier_concept_id": "modifier_source_value",
+    "route_concept_id": "route_source_value",
+    "qualifier_concept_id": "qualifier_source_value",
+    "cause_concept_id": "cause_source_value",
+    "cause_source_concept_id": "cause_source_value",
+    "anatomic_site_concept_id": "anatomic_site_source_value",
+    "disease_status_concept_id": "disease_status_source_value",
+    "country_concept_id": "country_source_value",
+    "place_of_service_concept_id": "place_of_service_source_value",
+    "specialty_concept_id": "specialty_source_value",
+    "specialty_source_concept_id": "specialty_source_value",
+    "payer_concept_id": "payer_source_value",
+    "payer_source_concept_id": "payer_source_value",
+    "plan_concept_id": "plan_source_value",
+    "plan_source_concept_id": "plan_source_value",
+    "sponsor_concept_id": "sponsor_source_value",
+    "sponsor_source_concept_id": "sponsor_source_value",
+    "stop_reason_concept_id": "stop_reason_source_value",
+    "stop_reason_source_concept_id": "stop_reason_source_value",
+}
+
+
+def _record_completeness_source_field(chk) -> Optional[str]:
+    """The companion source-value column for one field, if any.
+
+    unit_concept_id / unit_source_concept_id get the extension on
+    every table except DOSE_ERA; gender_concept_id / gender_source_
+    concept_id only get it on PROVIDER. Both are literal
+    ``@cdmTableName`` conditions in field_concept_record_
+    completeness.sql (
+    ``{@cdmTableName != 'DOSE_ERA' & (@cdmFieldName == 'UNIT_CONCEPT_ID'
+    | ...)}?{...}`` and
+    ``{@cdmTableName == 'PROVIDER' & (@cdmFieldName ==
+    'GENDER_CONCEPT_ID' | ...)}?{...}``), so they are handled here
+    rather than in the flat mapping above.
+    """
+    field = chk.cdm_field_name
+    table = chk.cdm_table_name
+    if field in ("unit_concept_id", "unit_source_concept_id"):
+        return None if table == "DOSE_ERA" else "unit_source_value"
+    if field in ("gender_concept_id", "gender_source_concept_id"):
+        return "gender_source_value" if table == "PROVIDER" else None
+    return _RECORD_COMPLETENESS_SOURCE_VALUE_FIELDS.get(field)
+
+
+def _concept_record_completeness(ctx, chk) -> CheckResult:
+    """Non-required-field completeness: zero, or null-with-source-present.
+
+    field_concept_record_completeness.sql never references CONCEPT --
+    it is a query over the CDM table alone. Its core predicate is
+    ``cdmTable.@cdmFieldName = 0``; for a fixed list of concept id
+    fields with a companion source-value column (see
+    _record_completeness_source_field above), it additionally flags --
+    and additionally counts into the denominator -- a NULL concept id
+    whose companion source value is populated. A field with no
+    companion (e.g. condition_concept_id) is judged purely on ``= 0``;
+    a NULL concept id there is neither counted nor a violation.
+
+    standardConceptRecordCompleteness and sourceConceptRecordCompleteness
+    both resolve to this same function: they share this one upstream
+    template and differ only in which field a given check instance
+    targets, never in behaviour.
+    """
+    skip = guard(ctx, chk)
+    if skip:
+        return skip
+    column = pl.col(chk.cdm_field_name)
+    source_field = _record_completeness_source_field(chk)
+    if source_field is not None and ctx.has_column(
+        chk.cdm_table_name, source_field
+    ):
+        source = pl.col(source_field)
+        violated_pred = (column == 0) | (
+            column.is_null() & source.is_not_null()
+        )
+        denominator_pred = column.is_not_null() | source.is_not_null()
+    else:
+        violated_pred = column == 0
+        denominator_pred = column.is_not_null()
+    return _count_where(ctx, chk, violated_pred, denominator=denominator_pred)
+
+
+@register("standardConceptRecordCompleteness")
+@register("sourceConceptRecordCompleteness")
+def concept_record_completeness(ctx, chk) -> CheckResult:
+    return _concept_record_completeness(ctx, chk)
