@@ -7,7 +7,7 @@ Instructions for AI agents working on this repository.
 **Qalita Packs** — Open source collection of data quality analysis packs for the Qalita platform.
 
 - **Organization** : `qalita`
-- **License** : Apache 2.0
+- **License** : Proprietary (QALITA Software License Agreement)
 - **Visibility** : Public
 - **Runtime** : Python >= 3.10
 
@@ -80,6 +80,7 @@ packs/
 ├── data_drift_pack/             # Drift detection
 ├── timeliness_pack/             # Data freshness
 ├── fhir_compliance_pack/        # FHIR compliance
+├── omop_cdm_pack/               # OMOP CDM quality (OHDSI DQD port)
 ├── great_expectations_pack/     # Great Expectations integration
 ├── soda_pack/                   # Soda integration
 ├── dbt_checks_pack/             # dbt integration
