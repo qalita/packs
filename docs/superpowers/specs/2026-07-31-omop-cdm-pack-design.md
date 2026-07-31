@@ -62,7 +62,10 @@ omop_cdm_pack/
 ├── LICENSE                 # Apache 2.0
 ├── NOTICE                  # attribution OHDSI (obligation de licence)
 └── omop_dqd/
-    ├── metadata/           # CSV OHDSI intacts (5.3 et 5.4)
+    ├── vendor/             # matériel OHDSI sous Apache 2.0, jamais modifié
+    │   ├── csv/            # CSV OHDSI intacts (5.3 et 5.4)
+    │   ├── LICENSE-APACHE-2.0.txt
+    │   └── README.md       # commit amont vendorisé
     ├── catalog.py          # CSV → List[CheckInstance]
     ├── context.py          # LazyFrame par table, détection du vocabulaire
     ├── checks/
@@ -167,11 +170,29 @@ par `checkName`, activation du vocabulaire, et la configuration `charts` habitue
 
 ## 8. Licence
 
-Apache 2.0 des deux côtés, donc réutilisation autorisée. Obligations à respecter :
+**DQD est sous Apache 2.0. Les packs QALITA sont sous licence propriétaire**
+(« QALITA SOFTWARE LICENSE AGREEMENT », `license = {text = "Proprietary"}`).
+L'`AGENTS.md` du dépôt affirme à tort qu'ils sont Apache 2.0.
 
-- `NOTICE` créditant `OHDSI/DataQualityDashboard`, conservé dans les distributions
-- En-têtes de licence préservés sur tout fichier repris
-- Mention de l'origine des CSV dans le `README.md`
+Ce n'est pas un obstacle : Apache 2.0 est une licence permissive qui autorise
+explicitement l'incorporation dans une œuvre propriétaire. Les obligations à respecter
+sont en revanche strictes.
+
+| Obligation Apache 2.0 §4 | Mise en œuvre |
+|---|---|
+| Joindre une copie de la licence | `omop_dqd/vendor/LICENSE-APACHE-2.0.txt` |
+| Conserver le `NOTICE` amont | `NOTICE` à la racine du pack, créditant `OHDSI/DataQualityDashboard` |
+| Signaler les fichiers modifiés | En-tête de chaque module `checks/*.py` indiquant qu'il dérive d'un template SQL OHDSI nommé |
+| Conserver les mentions de copyright | CSV vendorisés jamais modifiés ; `omop_dqd/vendor/README.md` fige la version/commit DQD repris |
+
+Le pack reste donc à double régime : le contenu de `omop_dqd/vendor/` et les modules
+`checks/` dérivés restent sous Apache 2.0 ; le reste est propriétaire QALITA. Le `README.md`
+et le `NOTICE` doivent l'énoncer.
+
+**Point à faire trancher hors ingénierie** : la réécriture en Polars de la logique des
+templates SQL constitue vraisemblablement une œuvre dérivée. Apache 2.0 l'autorise sous
+réserve des obligations ci-dessus, mais la qualification exacte et la rédaction du `NOTICE`
+méritent une validation juridique avant publication en `visibility: public`.
 
 ## 9. Hors périmètre
 
