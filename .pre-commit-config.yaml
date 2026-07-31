@@ -6,7 +6,7 @@ exclude: >
     \.next/|
     dist/|
     build/|
-    vendor/|
+    (^|.*/)vendor/|
     \.venv/|
     venv/|
     env/|
