@@ -862,6 +862,12 @@ VISIT_OCCURRENCE = pl.DataFrame(
 #   row 5 (id 104) NULL condition_concept_id     -> isRequired, completeness
 #   row 6 (id 104) duplicate id                  -> isPrimaryKey
 #                  concept 99999 unknown         -> isForeignKey
+#
+# Knock-on effect, intended: rows 2 and 3 both sit on visit 10, whose
+# window is 2015-01-01..2015-01-05, but their dates (2015-06-01 and
+# 1970-01-01) fall outside it. So withinVisitDates finds 2 violations,
+# not 1 — a consequence of the start-after-end and before-birth plants
+# above, not a separate mistake.
 CONDITION_OCCURRENCE = pl.DataFrame(
     {
         "condition_occurrence_id": [100, 101, 102, 103, 104, 104],
@@ -899,10 +905,32 @@ CONDITION_OCCURRENCE = pl.DataFrame(
     pl.col("condition_end_date").str.to_date(),
 )
 
-# CONCEPT: minimal vocabulary. 99999 is deliberately absent.
+# CONCEPT: minimal vocabulary.
+#
+# Every concept id referenced anywhere else in this fixture is present
+# here EXCEPT 99999, which is the single deliberate foreign-key
+# violation (CONDITION_OCCURRENCE row 6). That includes the race,
+# ethnicity and death-type concepts, which exist purely so PERSON and
+# DEATH are foreign-key clean — without them, an isForeignKey check
+# would find 9 violations nobody planted, and every exact count
+# downstream would be wrong.
+#
+# 4181412 is present but deprecated (standard_concept NULL,
+# invalid_reason "D") so isStandardValidConcept has something to catch.
 CONCEPT = pl.DataFrame(
     {
-        "concept_id": [201826, 8507, 8532, 9201, 9202, 4181412],
+        "concept_id": [
+            201826,
+            8507,
+            8532,
+            9201,
+            9202,
+            4181412,
+            8527,
+            8516,
+            38003564,
+            32817,
+        ],
         "concept_name": [
             "Type 2 diabetes",
             "MALE",
@@ -910,6 +938,10 @@ CONCEPT = pl.DataFrame(
             "Inpatient visit",
             "Outpatient visit",
             "Deprecated concept",
+            "White",
+            "Black or African American",
+            "Not Hispanic or Latino",
+            "EHR",
         ],
         "domain_id": [
             "Condition",
@@ -918,6 +950,10 @@ CONCEPT = pl.DataFrame(
             "Visit",
             "Visit",
             "Condition",
+            "Race",
+            "Race",
+            "Ethnicity",
+            "Type Concept",
         ],
         "concept_class_id": [
             "Clinical Finding",
@@ -926,9 +962,35 @@ CONCEPT = pl.DataFrame(
             "Visit",
             "Visit",
             "Clinical Finding",
+            "Race",
+            "Race",
+            "Ethnicity",
+            "Type Concept",
         ],
-        "standard_concept": ["S", "S", "S", "S", "S", None],
-        "invalid_reason": [None, None, None, None, None, "D"],
+        "standard_concept": [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            None,
+            "S",
+            "S",
+            "S",
+            "S",
+        ],
+        "invalid_reason": [
+            None,
+            None,
+            None,
+            None,
+            None,
+            "D",
+            None,
+            None,
+            None,
+            None,
+        ],
     },
     schema_overrides={
         "standard_concept": pl.Utf8,
