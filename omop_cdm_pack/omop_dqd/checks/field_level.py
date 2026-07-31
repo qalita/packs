@@ -20,52 +20,23 @@ import polars as pl
 from omop_dqd.registry import register
 from omop_dqd.results import CheckResult, counted, not_applicable
 
-# OMOP datatype names mapped onto the Polars dtype groups that satisfy
-# them. A source is free to widen a type (int32 where int64 is
-# specified) so membership, not equality, is what matters.
-#
-# pl.INTEGER_DTYPES / pl.FLOAT_DTYPES are deprecated on the installed
-# Polars version (1.43.1) and emit a DeprecationWarning on access
-# rather than raising AttributeError, so the explicit replacement
-# sets from the task brief's Step 4 are used unconditionally here to
-# keep test output warning-free.
-#
-# "varchar" is included (absent from the brief's sample) because the
-# vendored Field_Level CSVs declare cdmDatatype as "varchar(N)" for
-# the majority of CDM columns -- without it, cdmDatatype would be
-# NOT_APPLICABLE for nearly every real field, and the brief's own
-# test (a varchar(50) declaration checked against an integer column)
-# would never observe a mismatch.
-_DATATYPE_GROUPS = {
-    "integer": frozenset(
-        {
-            pl.Int8,
-            pl.Int16,
-            pl.Int32,
-            pl.Int64,
-            pl.UInt8,
-            pl.UInt16,
-            pl.UInt32,
-            pl.UInt64,
-        }
-    ),
-    "bigint": frozenset(
-        {
-            pl.Int8,
-            pl.Int16,
-            pl.Int32,
-            pl.Int64,
-            pl.UInt8,
-            pl.UInt16,
-            pl.UInt32,
-            pl.UInt64,
-        }
-    ),
-    "float": frozenset({pl.Float32, pl.Float64}),
-    "date": frozenset({pl.Date}),
-    "datetime": frozenset({pl.Datetime}),
-    "varchar": frozenset({pl.Utf8}),
-}
+# Concrete Polars dtypes making up "integer" and "float", used by
+# cdmDatatype. pl.INTEGER_DTYPES / pl.FLOAT_DTYPES are deprecated on
+# the installed Polars version (1.43.1) and emit a DeprecationWarning
+# on access, so the explicit sets are spelled out here instead.
+_INTEGER_DTYPES = frozenset(
+    {
+        pl.Int8,
+        pl.Int16,
+        pl.Int32,
+        pl.Int64,
+        pl.UInt8,
+        pl.UInt16,
+        pl.UInt32,
+        pl.UInt64,
+    }
+)
+_FLOAT_DTYPES = frozenset({pl.Float32, pl.Float64})
 
 
 def guard(ctx, chk) -> Optional[CheckResult]:
@@ -114,21 +85,36 @@ def cdm_field(ctx, chk) -> CheckResult:
 
 @register("cdmDatatype")
 def cdm_datatype(ctx, chk) -> CheckResult:
+    """Non-null values that are not whole numbers.
+
+    Upstream only ever runs this for fields declared "integer" (see
+    the evaluationFilter in Check_Descriptions.csv), and counts
+    non-null rows that are non-numeric or numeric-with-a-decimal-
+    point, over a denominator of every row in the table.
+
+    In parquet the declared type is enforced by the file, so an
+    integer dtype can hold no violation; float and string columns
+    can.
+    """
     skip = guard(ctx, chk)
     if skip:
         return skip
-    declared = chk.params.get("value", "").strip().lower()
-    group = None
-    for prefix, dtypes in _DATATYPE_GROUPS.items():
-        if declared.startswith(prefix):
-            group = dtypes
-            break
-    if group is None:
-        # Datatype labels outside the known groups (integer, bigint,
-        # float, date, datetime, varchar) are not checked.
-        return not_applicable(f"datatype {declared!r} is not checked")
-    actual = ctx.dtypes(chk.cdm_table_name)[chk.cdm_field_name]
-    return counted(0 if actual in group else 1, 1)
+    field = chk.cdm_field_name
+    frame = ctx.table(chk.cdm_table_name)
+    total = _row_count(frame)
+    dtype = ctx.dtypes(chk.cdm_table_name)[field]
+    column = pl.col(field)
+
+    if dtype in _INTEGER_DTYPES:
+        return counted(0, total)
+    if dtype in _FLOAT_DTYPES:
+        violated = column.is_not_null() & (column != column.floor())
+    elif dtype == pl.Utf8:
+        parsed = column.str.strip_chars().cast(pl.Int64, strict=False)
+        violated = column.is_not_null() & parsed.is_null()
+    else:
+        return not_applicable(f"dtype {dtype} cannot be checked as an integer")
+    return counted(_row_count(frame.filter(violated)), total)
 
 
 @register("isRequired")
@@ -149,31 +135,54 @@ def measure_value_completeness(ctx, chk) -> CheckResult:
 
 @register("sourceValueCompleteness")
 def source_value_completeness(ctx, chk) -> CheckResult:
+    """Distinct source values that are unmapped.
+
+    Upstream counts DISTINCT source values whose companion standard
+    concept field is 0, over a denominator of distinct non-null
+    source values plus one bucket for NULL if any row has one. Both
+    numbers are counts of values, not of rows.
+    """
     skip = guard(ctx, chk)
     if skip:
         return skip
-    column = pl.col(chk.cdm_field_name)
-    return _count_where(
-        ctx, chk, column.is_null() | (column.cast(pl.Utf8) == "")
-    )
+    standard_field = chk.params.get("standardConceptFieldName", "").lower()
+    if not standard_field or not ctx.has_column(
+        chk.cdm_table_name, standard_field
+    ):
+        return not_applicable(
+            f"companion field {standard_field!r} unavailable"
+        )
+    field = chk.cdm_field_name
+    frame = ctx.table(chk.cdm_table_name)
+
+    violated = frame.filter(pl.col(standard_field) == 0).select(field).unique()
+    distinct_non_null = _row_count(frame.select(field).drop_nulls().unique())
+    has_null = _row_count(frame.filter(pl.col(field).is_null())) > 0
+    denominator = distinct_non_null + (1 if has_null else 0)
+    return counted(_row_count(violated), denominator)
 
 
 @register("isPrimaryKey")
 def is_primary_key(ctx, chk) -> CheckResult:
+    """Rows whose key value is not unique.
+
+    Upstream counts EVERY row of a duplicated group, not the excess
+    beyond the first: a value appearing twice contributes 2, not 1.
+    """
     skip = guard(ctx, chk)
     if skip:
         return skip
+    field = chk.cdm_field_name
     frame = ctx.table(chk.cdm_table_name)
-    counts = (
-        frame.select(
-            pl.len().alias("total"),
-            pl.col(chk.cdm_field_name).n_unique().alias("distinct"),
-        )
-        .collect(engine="streaming")
-        .row(0)
+    total = _row_count(frame)
+    duplicated = (
+        frame.group_by(field)
+        .agg(pl.len().alias("_n"))
+        .filter(pl.col("_n") > 1)
+        .select(field)
     )
-    total, distinct = counts
-    return counted(total - distinct, total)
+    violated = frame.join(duplicated, on=field, how="semi")
+    return counted(_row_count(violated), total)
 
 
 def _bound(chk) -> Optional[float]:
