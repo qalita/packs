@@ -1,9 +1,10 @@
 import pytest
+from dataclasses import replace
 
 from omop_dqd.catalog import CheckInstance
-from omop_dqd.evaluate import evaluate
+from omop_dqd.evaluate import EvaluatedCheck, evaluate
 from omop_dqd.registry import get_check, is_registered, register
-from omop_dqd.results import CheckStatus, counted, not_applicable
+from omop_dqd.results import CheckStatus, counted, errored, not_applicable
 
 
 def _instance(threshold=0.0, check_name="isRequired"):
@@ -90,3 +91,26 @@ def test_duplicate_registration_is_rejected():
         @register("duplicateCheckForTest")
         def _second(ctx, chk):
             return counted(0, 1)
+
+
+def test_error_survives_evaluation():
+    result = evaluate(_instance(), errored("boom"))
+    assert result.status == CheckStatus.ERROR
+    assert "boom" in result.message
+
+
+def test_error_is_not_recomputed_from_its_counts():
+    # counts that would evaluate to PASS if the status were ignored
+    poisoned = replace(
+        errored("boom"), num_violated_rows=0, num_denominator_rows=100
+    )
+    assert evaluate(_instance(threshold=0.0), poisoned).status == (
+        CheckStatus.ERROR
+    )
+
+
+def test_evaluated_check_pairs_an_instance_with_its_result():
+    instance = _instance()
+    evaluated = EvaluatedCheck(instance, counted(1, 4))
+    assert evaluated.instance is instance
+    assert evaluated.result.pct_violated_rows == 25.0
