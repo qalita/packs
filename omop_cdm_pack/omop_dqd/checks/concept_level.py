@@ -126,13 +126,23 @@ def _plausible_gender(ctx, chk, use_descendants: bool) -> CheckResult:
             return not_applicable("no concept id on the check instance")
         if not ctx.has_table("CONCEPT_ANCESTOR"):
             return not_applicable("CONCEPT_ANCESTOR is absent from the source")
+        # Deliberately NOT deduplicated. Upstream's own SQL is a
+        # literal, un-DISTINCT-ed join --
+        # ``JOIN concept_ancestor ca ON ca.descendant_concept_id =
+        # cdmTable.@cdmFieldName WHERE ca.ancestor_concept_id IN
+        # (@conceptId)`` -- so a base row whose concept descends from
+        # TWO ancestor ids in the list contributes TWO rows to
+        # COUNT_BIG(*), in both the denominator and the violated-rows
+        # subquery. This looks like an artefact of how that SQL was
+        # written rather than deliberate design, but the pack's
+        # contract is to reproduce upstream's numbers, not improve on
+        # them -- so no `.unique()` / semi-join collapsing here.
         descendants = (
             ctx.table("CONCEPT_ANCESTOR")
             .filter(pl.col("ancestor_concept_id").is_in(concept_ids))
             .select(pl.col("descendant_concept_id").alias(chk.cdm_field_name))
-            .unique()
         )
-        base = frame.join(descendants, on=chk.cdm_field_name, how="semi")
+        base = frame.join(descendants, on=chk.cdm_field_name, how="inner")
     else:
         concept_id = _concept_id(chk)
         if concept_id is None:

@@ -18,6 +18,7 @@ import pytest
 
 import omop_dqd.checks  # noqa: F401
 from omop_dqd.catalog import CheckInstance
+from omop_dqd.checks.concept_level import _int_list
 from omop_dqd.context import CdmContext
 from omop_dqd.registry import get_check
 from omop_dqd.results import CheckStatus
@@ -402,3 +403,133 @@ def test_plausible_unit_concept_ids_minus_one_sentinel_flags_any_nonzero_unit(
     # violated; unit=-1 in denominator AND violated (non-zero).
     assert result.num_denominator_rows == 2
     assert result.num_violated_rows == 1
+
+
+# --- join multiplicity (plausibleGenderUseDescendants) -----------------
+
+
+@pytest.fixture
+def overlapping_ancestors_ctx(tmp_path):
+    """One person, one condition row, and two CONCEPT_ANCESTOR rows
+    that share a descendant but have distinct ancestor_concept_ids,
+    both members of the check's conceptId list.
+
+    concept_plausible_gender_use_descendants.sql's violated-rows and
+    denominator subqueries both do a literal, un-DISTINCT-ed
+    ``JOIN concept_ancestor ca ON ca.descendant_concept_id =
+    cdmTable.@cdmFieldName WHERE ca.ancestor_concept_id IN
+    (@conceptId)`` -- with no DISTINCT anywhere, a base row whose
+    concept descends from two list members contributes TWO rows to
+    COUNT_BIG(*), in both subqueries. This fixture isolates exactly
+    that shape, deliberately built from scratch (not mini_cdm) so no
+    other row's multiplicity muddies the count.
+    """
+    person = pl.DataFrame(
+        {"person_id": [1], "gender_concept_id": [8507]},
+        schema_overrides={
+            "person_id": pl.Int64,
+            "gender_concept_id": pl.Int64,
+        },
+    )
+    condition = pl.DataFrame(
+        {
+            "condition_occurrence_id": [1],
+            "person_id": [1],
+            "condition_concept_id": [201826],
+        },
+        schema_overrides={
+            "person_id": pl.Int64,
+            "condition_concept_id": pl.Int64,
+        },
+    )
+    concept_ancestor = pl.DataFrame(
+        {
+            "ancestor_concept_id": [10, 20],
+            "descendant_concept_id": [201826, 201826],
+        },
+        schema_overrides={
+            "ancestor_concept_id": pl.Int64,
+            "descendant_concept_id": pl.Int64,
+        },
+    )
+    paths = {}
+    for name, frame in (
+        ("PERSON", person),
+        ("CONDITION_OCCURRENCE", condition),
+        ("CONCEPT_ANCESTOR", concept_ancestor),
+    ):
+        path = str(tmp_path / f"{name.lower()}.parquet")
+        frame.write_parquet(path)
+        paths[name] = [path]
+    return CdmContext.from_paths(paths)
+
+
+def test_plausible_gender_use_descendants_reproduces_upstreams_join_multiplicity(
+    overlapping_ancestors_ctx,
+):
+    # Deliberately NOT deduplicated: upstream's SQL has no DISTINCT,
+    # so this single CONDITION_OCCURRENCE row -- matched by both
+    # CONCEPT_ANCESTOR rows -- must count twice in the denominator
+    # (and, if it were a violation, twice there too). A semi/anti
+    # join or a `.unique()` on the descendant set would collapse this
+    # to 1, silently diverging from upstream's own numbers.
+    result = _run(
+        overlapping_ancestors_ctx,
+        "plausibleGenderUseDescendants",
+        "CONDITION_OCCURRENCE",
+        "condition_concept_id",
+        conceptId="10, 20",
+        value="Male",
+    )
+    assert result.num_denominator_rows == 2
+    assert result.num_violated_rows == 0
+
+
+def test_plausible_gender_use_descendants_join_multiplicity_carries_into_violations(
+    overlapping_ancestors_ctx,
+):
+    # Same fixture, but requiring Female makes the single underlying
+    # row a violation -- and it must count twice there too, not just
+    # in the denominator, since violated rows are filtered from the
+    # same un-deduplicated join.
+    result = _run(
+        overlapping_ancestors_ctx,
+        "plausibleGenderUseDescendants",
+        "CONDITION_OCCURRENCE",
+        "condition_concept_id",
+        conceptId="10, 20",
+        value="Female",
+    )
+    assert result.num_denominator_rows == 2
+    assert result.num_violated_rows == 2
+
+
+# --- malformed conceptId tokens -----------------------------------------
+
+
+def test_int_list_skips_malformed_tokens_but_keeps_the_rest():
+    # _int_list's `except ValueError: continue` is meant to skip a
+    # genuinely non-numeric token while keeping the rest of the list
+    # parseable. Nothing above exercises a truly malformed token (only
+    # whitespace-irregular valid ones), so a refactor that started
+    # dropping the whole list on any bad token -- or stopped skipping
+    # bad tokens at all -- would pass every other test here.
+    assert _int_list("10, foo, 20,, 30") == [10, 20, 30]
+
+
+def test_plausible_gender_use_descendants_skips_a_malformed_concept_id(
+    mini_cdm,
+):
+    # End-to-end: a malformed token inside conceptId must not make the
+    # whole check NOT_APPLICABLE nor silently drop the valid ids.
+    result = _run(
+        mini_cdm,
+        "plausibleGenderUseDescendants",
+        "CONDITION_OCCURRENCE",
+        "condition_concept_id",
+        conceptId="201826, notanumber",
+        value="Male",
+    )
+    assert result.status != CheckStatus.NOT_APPLICABLE
+    assert result.num_denominator_rows == 4
+    assert result.num_violated_rows == 0
