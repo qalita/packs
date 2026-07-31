@@ -1,7 +1,9 @@
 import pytest
 
 from omop_dqd.catalog import (
+    FIELD_CHECK_SPECS,
     CheckInstance,
+    _instantiate,
     load_catalog,
     load_check_descriptions,
 )
@@ -174,3 +176,63 @@ def test_source_value_completeness_carries_its_companion_field():
     checks = [c for c in catalog if c.check_name == "sourceValueCompleteness"]
     assert checks
     assert all(c.params.get("standardConceptFieldName") for c in checks)
+
+
+# The real vendored CSVs happen to have fkDomain/fkClass set only on
+# rows where isForeignKey is already "Yes", so the `requires` gate is
+# a no-op against real data: nothing in the tests above would fail if
+# the gate were deleted. These drive _instantiate directly with
+# synthetic rows so the gate is exercised regardless of what the real
+# CSVs contain.
+def _spec_for(name):
+    return tuple(s for s in FIELD_CHECK_SPECS if s.name == name)
+
+
+def _field_row(**overrides):
+    row = {
+        "cdmTableName": "SOME_TABLE",
+        "cdmFieldName": "some_concept_id",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_fk_domain_is_skipped_when_the_field_is_not_a_foreign_key():
+    produced = _instantiate(
+        [_field_row(fkDomain="Condition", isForeignKey="No")],
+        _spec_for("fkDomain"),
+        load_check_descriptions("5.4"),
+        "cdmFieldName",
+    )
+    assert not produced
+
+
+def test_fk_domain_is_instantiated_when_the_field_is_a_foreign_key():
+    produced = _instantiate(
+        [_field_row(fkDomain="Condition", isForeignKey="Yes")],
+        _spec_for("fkDomain"),
+        load_check_descriptions("5.4"),
+        "cdmFieldName",
+    )
+    assert len(produced) == 1
+    assert produced[0].params["value"] == "Condition"
+
+
+def test_fk_class_is_skipped_when_the_field_is_not_a_foreign_key():
+    produced = _instantiate(
+        [_field_row(fkClass="Ingredient", isForeignKey="")],
+        _spec_for("fkClass"),
+        load_check_descriptions("5.4"),
+        "cdmFieldName",
+    )
+    assert not produced
+
+
+def test_requires_matching_is_case_insensitive():
+    produced = _instantiate(
+        [_field_row(fkClass="Ingredient", isForeignKey="yes")],
+        _spec_for("fkClass"),
+        load_check_descriptions("5.4"),
+        "cdmFieldName",
+    )
+    assert len(produced) == 1
