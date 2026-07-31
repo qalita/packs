@@ -2,8 +2,9 @@
 
 Evaluates an OMOP Common Data Model instance against the check suite of the
 [OHDSI DataQualityDashboard](https://github.com/OHDSI/DataQualityDashboard):
-27 check types instantiated over the CDM specification into roughly 4 000 checks,
-grouped by the three Kahn framework categories (conformance, completeness, plausibility).
+27 check types instantiated over the CDM specification into 2 539 checks for CDM 5.4
+(2 021 for CDM 5.3), grouped by the three Kahn framework categories (conformance,
+completeness, plausibility).
 
 Everything runs in Polars, lazily and in streaming mode. No R, no JVM, no SQL pushdown.
 

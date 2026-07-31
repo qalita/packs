@@ -113,7 +113,8 @@ CONDITION_OCCURRENCE = pl.DataFrame(
 # downstream would be wrong.
 #
 # 4181412 is present but deprecated (standard_concept NULL,
-# invalid_reason "D") so isStandardValidConcept has something to catch.
+# invalid_reason "D"). It is currently unreferenced by any CDM table
+# in this fixture, so no check actually evaluates it.
 CONCEPT = pl.DataFrame(
     {
         "concept_id": [
