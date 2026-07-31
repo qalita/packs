@@ -4,7 +4,7 @@
 
 **Goal:** Build a QALITA pack that evaluates an OMOP CDM instance against the 27 data quality check types of the OHDSI DataQualityDashboard, executed entirely in Polars.
 
-**Architecture:** The OHDSI check metadata CSVs are vendored verbatim and drive check instantiation (~550 CSV rows → ~4 000 check instances). The 30 OHDSI SQL Server templates are reimplemented as 27 Polars functions sharing one signature. A runner groups check instances by CDM table so each table is scanned once, then results are aggregated into QALITA metrics and recommendations.
+**Architecture:** The OHDSI check metadata CSVs are vendored verbatim and drive check instantiation (~550 CSV rows → 2 757 check instances for CDM 5.4). The 30 OHDSI SQL Server templates are reimplemented as 27 Polars functions sharing one signature. A runner groups check instances by CDM table so each table is scanned once, then results are aggregated into QALITA metrics and recommendations.
 
 **Tech Stack:** Python 3.10/3.11, Polars (lazy + streaming), pyarrow, `qalita_core`, pytest.
 
@@ -299,7 +299,7 @@ Create `omop_cdm_pack/README.md`:
 
 Evaluates an OMOP Common Data Model instance against the check suite of the
 [OHDSI DataQualityDashboard](https://github.com/OHDSI/DataQualityDashboard):
-27 check types instantiated over the CDM specification into roughly 4 000 checks,
+27 check types instantiated over the CDM specification into 2 757 checks for CDM 5.4 (2 163 for 5.3),
 grouped by the three Kahn framework categories (conformance, completeness, plausibility).
 
 Everything runs in Polars, lazily and in streaming mode. No R, no JVM, no SQL pushdown.
@@ -3298,7 +3298,7 @@ python -m pytest tests/test_runner.py -v
 Expected: 5 passed.
 
 `test_full_catalog_run_produces_no_errors` is the integration gate for Tasks 5–9: it
-asserts that no check type crashes across the whole ~4 000-instance catalog. If it fails,
+asserts that no check type crashes across the whole ~2 800-instance catalog. If it fails,
 the assertion message names the offending check and its error — fix that check, do not
 weaken the test.
 
@@ -3314,7 +3314,7 @@ git commit -m "feat(omop_cdm_pack): add fault-tolerant check runner"
 
 ### Task 11: Metrics and recommendations aggregation
 
-Turns ~4 000 evaluated checks into the handful of QALITA metrics defined in the spec.
+Turns ~2 800 evaluated checks into the handful of QALITA metrics defined in the spec.
 
 **Files:**
 - Create: `omop_cdm_pack/omop_dqd/reporting.py`

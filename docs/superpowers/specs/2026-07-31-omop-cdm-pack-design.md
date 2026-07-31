@@ -8,7 +8,7 @@ en un pack QALITA évaluant la qualité d'une instance OMOP CDM.
 
 ## Contexte
 
-DQD est un package R sous Apache 2.0 qui exécute ~4 000 checks de qualité contre une
+DQD est un package R sous Apache 2.0 qui exécute ~2 800 checks de qualité contre une
 instance OMOP CDM. Sa valeur ne réside pas dans le code R : elle réside dans deux
 artefacts qui sont des **fichiers de données portables**.
 
@@ -24,7 +24,7 @@ seuil. C'est cette boucle que l'on réécrit.
 
 | Question | Décision | Motif |
 |---|---|---|
-| Périmètre | Les 24 check types de DQD (conformance + completeness + plausibility) | Demandé explicitement |
+| Périmètre | Les 27 check types de DQD (conformance + completeness + plausibility) | Demandé explicitement |
 | Moteur d'exécution | **Polars**, en lazy/streaming — pas de pushdown SQL | Demandé ; aligne le pack sur le reste du catalogue QALITA |
 | Forme de la source | Schéma CDM entier ; le pack déduit la liste des tables des CSV de métadonnées | Les checks inter-tables (`plausibleAfterBirth`, `withinVisitDates`, `isForeignKey`) sont une part majeure de DQD |
 | Vocabulaire OMOP | **Optionnel** ; si `CONCEPT`/`CONCEPT_ANCESTOR` sont absents, les checks concernés sont `Not Applicable` et non `Fail` | Sémantique de DQD lui-même ; évite d'imposer ~10M lignes pour un run trivial |
@@ -43,10 +43,10 @@ systématique (§5) repousse cette limite mais ne la supprime pas.
 |---|---|
 | `inst/csv/*_Table_Level.csv`, `*_Field_Level.csv`, `*_Concept_Level.csv` | **Repris tels quels**, zéro modification |
 | `inst/csv/*_Check_Descriptions.csv` | **Repris tel quel** — libellés, catégories Kahn, sévérité |
-| `inst/sql/sql_server/*.sql` (30 fichiers) | **Réécrits** en 24 fonctions Polars |
+| `inst/sql/sql_server/*.sql` (30 fichiers) | **Réécrits** en 27 fonctions Polars |
 | Code R (`R/`), application Shiny | **Ignorés** — la restitution est le métier de la plateforme QALITA |
 
-Les checks étant paramétrés, 24 fonctions suffisent à produire les ~4 000 checks instanciés.
+Les checks étant paramétrés, 27 fonctions suffisent à produire les ~2 800 checks instanciés.
 
 ## 2. Structure du pack
 
@@ -95,9 +95,9 @@ class CheckInstance:
     params: dict             # fkTableName, plausibleValueLow, standardConceptFieldName, …
 ```
 
-550 lignes de CSV → ~4 000 instances. Portage mécanique, entièrement testable sans données.
+550 lignes de CSV → 2 757 instances (CDM 5.4) et 2 163 (CDM 5.3). Portage mécanique, entièrement testable sans données.
 
-## 4. Les 24 checks en Polars
+## 4. Les 27 checks en Polars
 
 | Famille | Checks | Traduction |
 |---|---|---|
@@ -129,7 +129,7 @@ inter-lignes ordonnée. C'est un idiome Polars standard (`sort` + `shift` sur gr
 
 ## 5. Exécution
 
-Naïvement, 4 000 checks signifient 4 000 scans du parquet. On groupe donc les checks **par
+Naïvement, ~2 800 checks signifient ~2 800 scans du parquet. On groupe donc les checks **par
 table** et on collecte tous les agrégats d'une même table en une passe, avec
 `pl.collect_all()` pour paralléliser entre tables. C'est l'équivalent Polars du batching
 `UNION ALL` de DQD, et c'est ce qui rend l'approche viable en volume.
@@ -139,7 +139,7 @@ l'exécution continue.
 
 ## 6. Sortie QALITA
 
-Émettre 4 000 métriques brutes serait inexploitable. On agrège :
+Émettre ~2 800 métriques brutes serait inexploitable. On agrège :
 
 - `score` — dataset ; % de checks passés, pondéré par sévérité (`fatal` > `convention` > `characterization`)
 - `conformance_score`, `completeness_score`, `plausibility_score` — dataset ; les trois axes du framework Kahn
