@@ -13,4 +13,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.0
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@v3.95.7
+        uses: trufflesecurity/trufflehog@v3.96.0
