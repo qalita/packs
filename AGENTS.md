@@ -162,6 +162,19 @@ tuples de dimensions dupliqués, crash dans `add()`. C'est arrivé sur
 - **Concaténer les chunks avant d'itérer** (`profiling_pack`, qui charge tout le
   parquet en un seul DataFrame avant de calculer les agrégats).
 
+### Le piège du LazyFrame
+
+`pack.scan_data()` — la voie recommandée pour le 100 Go+ (`duplicates_finder_pack`,
+`data_compare_pack`, `profiling_pack`, `outlier_detection_pack`,
+`referential_integrity_pack` l'utilisent déjà) — renvoie un `pl.LazyFrame`. Le
+passer tel quel à `figures.add()` ou `top_n()` lève un `TypeError` explicite
+(« frame est un plan différé ») plutôt qu'un plantage confus : `figures.py` ne
+matérialise jamais votre plan à votre place. Appelez `.collect()` (ou
+`.collect(engine="streaming")`) sur votre **agrégat** — pas sur la source
+complète — avant de le passer. La bibliothèque refuse de le faire pour vous :
+collecter dans `add()` matérialiserait tout le plan dans le worker et annulerait
+l'intérêt du plafond de lignes, qui existe justement pour éviter ça.
+
 ### Le piège du uv.lock
 
 Bumper le plancher `qalita-core>=X.Y.Z` dans `pyproject.toml` ne change rien tant
