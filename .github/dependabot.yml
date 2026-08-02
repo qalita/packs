@@ -1,169 +1,36 @@
 version: 2
 updates:
-  # Profiling pack
+  # Python dependencies for every pack.
+  #
+  # This used to be 15 hand-maintained entries, one per pack, which had
+  # drifted from reality: versioning_pack was listed but no longer exists,
+  # while numeric_validation_pack, pattern_validation_pack and
+  # text_validation_pack existed with no entry at all and so received no
+  # version updates (only security ones, which need no config).
+  #
+  # The "/*_pack" glob covers every pack and keeps covering new ones without
+  # a config change. The `directories` key supports globbing; `directory`
+  # does not.
   - package-ecosystem: "pip"
-    directory: "/profiling_pack"
+    directories:
+      - "/*_pack"
     schedule:
       interval: "monthly"
     commit-message:
-      prefix: "deps(profiling)"
+      prefix: "deps(packs)"
     labels:
       - "dependencies"
       - "python"
-
-  # Accuracy pack
-  - package-ecosystem: "pip"
-    directory: "/accuracy_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(accuracy)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Data compare pack
-  - package-ecosystem: "pip"
-    directory: "/data_compare_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(data-compare)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Data drift pack
-  - package-ecosystem: "pip"
-    directory: "/data_drift_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(data-drift)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # DBT checks pack
-  - package-ecosystem: "pip"
-    directory: "/dbt_checks_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(dbt-checks)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Duplicates finder pack
-  - package-ecosystem: "pip"
-    directory: "/duplicates_finder_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(duplicates)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # FHIR compliance pack
-  - package-ecosystem: "pip"
-    directory: "/fhir_compliance_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(fhir)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Great Expectations pack
-  - package-ecosystem: "pip"
-    directory: "/great_expectations_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(great-expectations)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Outlier detection pack
-  - package-ecosystem: "pip"
-    directory: "/outlier_detection_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(outlier)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # PII scanner pack
-  - package-ecosystem: "pip"
-    directory: "/pii_scanner_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(pii)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Referential integrity pack
-  - package-ecosystem: "pip"
-    directory: "/referential_integrity_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(referential)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Schema scanner pack
-  - package-ecosystem: "pip"
-    directory: "/schema_scanner_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(schema)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Soda pack
-  - package-ecosystem: "pip"
-    directory: "/soda_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(soda)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Timeliness pack
-  - package-ecosystem: "pip"
-    directory: "/timeliness_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(timeliness)"
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Versioning pack
-  - package-ecosystem: "pip"
-    directory: "/versioning_pack"
-    schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "deps(versioning)"
-    labels:
-      - "dependencies"
-      - "python"
+    # One grouped PR carries a single coherent resolution per lockfile.
+    # Merging ungrouped lockfile PRs in sequence replays stale diffs onto a
+    # moved base, which git merges without conflict but leaves inconsistent.
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -175,3 +42,7 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    groups:
+      actions:
+        patterns:
+          - "*"
