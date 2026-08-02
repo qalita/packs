@@ -1,362 +1,288 @@
-from qalita_core.pack import Pack
-import pandas as pd
+"""
+# QALITA (c) COPYRIGHT 2025 - ALL RIGHTS RESERVED -
+
+Duplicates finder — streaming implementation.
+
+Everything this pack computes stays inside the Polars streaming engine: the
+group-by that identifies duplicate key combinations never leaves the engine as
+a Python object, and the only rows that reach memory are the bounded export
+sample. The previous version read every parquet chunk into pandas before it
+reached the (already streaming) counting helper, which made the counting helper
+irrelevant to peak memory.
+"""
+
+from __future__ import annotations
+
 import logging
-from qalita_core.utils import determine_recommendation_level
-from datetime import datetime
 import os
-from qalita_core.aggregation import (
-    detect_chunked_from_items,
-    DuplicateAggregator,
-    normalize_and_dedupe_recommendations,
-)
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+import polars as pl
+
+from qalita_core import analytics
+from qalita_core.pack import Pack
+from qalita_core.utils import determine_recommendation_level
 
 logger = logging.getLogger(__name__)
 
-# Big data configuration
-MAX_DUPLICATES_TO_EXPORT = 10_000  # Limit export to avoid memory issues
+# Name of the group size column. Prefixed so it cannot collide with a user
+# column that happens to be called "count".
+_COUNT = "__qalita_group_size"
 
-# Try to import Polars for efficient duplicate detection
-try:
-    import polars as pl
+# Bound on the rows written to the duplicates report. The report is a bounded
+# artefact by construction: an unbounded export is what used to make a 100 GiB
+# source unanalysable.
+DEFAULT_DUPLICATE_ROWS_LIMIT = 10_000
+MAX_DUPLICATE_ROWS_LIMIT = 100_000
 
-    POLARS_AVAILABLE = True
-except ImportError:
-    POLARS_AVAILABLE = False
-    pl = None
+# Score below which the pack raises a recommendation.
+SCORE_RECOMMENDATION_THRESHOLD = 0.9
 
 
-def _count_duplicates_polars(paths, uniqueness_columns):
+def resolve_uniqueness_columns(
+    pack_config: Dict[str, Any], schema: Dict[str, Any]
+) -> List[str]:
+    """Columns whose combination defines a duplicate.
+
+    Falls back to every column, which is the "identical rows" definition.
+    Unknown configured columns are rejected rather than silently ignored: a
+    typo there changes the meaning of the whole score.
     """
-    Count duplicates using Polars group_by().count() streaming.
+    configured = (pack_config.get("job") or {}).get(
+        "compute_uniqueness_columns"
+    ) or []
+    if not configured:
+        return list(schema)
 
-    This is memory-efficient for large datasets as it uses streaming aggregation.
+    unknown = [col for col in configured if col not in schema]
+    if unknown:
+        raise ValueError(
+            f"compute_uniqueness_columns refers to columns absent from the "
+            f"dataset: {unknown}. Available: {sorted(schema)}"
+        )
+    return list(configured)
+
+
+def duplicate_counts(
+    lf: "pl.LazyFrame",
+    uniqueness_columns: Sequence[str],
+    *,
+    exact: bool = True,
+) -> Tuple[int, int, str]:
+    """Total rows and duplicate rows, without materializing the group table.
+
+    ``exact`` (the default here) groups by the uniqueness columns and sums
+    ``size - 1`` inside the engine. The streaming engine spills group state to
+    disk, so this holds on a source far larger than RAM.
+
+    ``exact=False`` derives the duplicate count from a HyperLogLog distinct
+    count. It is O(1) memory but it is a subtraction of two large numbers: at a
+    low duplication rate the HLL error dwarfs the answer, so it is offered as an
+    opt-in rather than the default that the rest of the suite uses.
 
     Returns:
-        tuple: (total_rows, total_duplicates)
+        ``(total_rows, duplicates, method)``.
     """
-    if not POLARS_AVAILABLE:
-        raise ImportError("Polars required for efficient duplicate detection")
+    columns = list(uniqueness_columns)
+    if not columns:
+        raise ValueError("at least one uniqueness column is required")
 
-    lf = pl.scan_parquet(paths)
+    total_rows = analytics.row_count(lf)
 
-    # Get total rows
-    try:
-        total_rows = lf.select(pl.len()).collect(engine="streaming").item()
-    except Exception:
-        total_rows = lf.select(pl.len()).collect().item()
-
-    # Count unique combinations using group_by
-    # Duplicates = total_rows - unique_combinations
-    unique_count_lf = (
-        lf.select(uniqueness_columns)
-        .group_by(uniqueness_columns)
-        .agg(pl.len().alias("_count"))
-    )
-
-    try:
-        unique_df = unique_count_lf.collect(engine="streaming")
-    except Exception:
-        unique_df = unique_count_lf.collect()
-
-    # Count duplicates: rows where count > 1 contribute (count - 1) duplicates
-    duplicates = (unique_df["_count"] - 1).clip(0, None).sum()
-
-    return int(total_rows), int(duplicates)
-
-
-def _get_duplicate_rows_polars(paths, uniqueness_columns, limit=None):
-    """
-    Get actual duplicate rows using Polars (for export).
-
-    Returns duplicate rows as a pandas DataFrame.
-    """
-    if not POLARS_AVAILABLE:
-        raise ImportError("Polars required")
-
-    lf = pl.scan_parquet(paths)
-
-    # Find rows that appear more than once
-    counts_lf = lf.group_by(uniqueness_columns).agg(
-        pl.len().alias("_dup_count")
-    )
-    dup_keys_lf = counts_lf.filter(pl.col("_dup_count") > 1).select(
-        uniqueness_columns
-    )
-
-    # Join back to get full duplicate rows
-    dup_rows_lf = lf.join(dup_keys_lf, on=uniqueness_columns, how="inner")
-
-    if limit:
-        dup_rows_lf = dup_rows_lf.head(limit)
-
-    try:
-        return dup_rows_lf.collect(engine="streaming").to_pandas()
-    except Exception:
-        return dup_rows_lf.collect().to_pandas()
-
-
-# --- Chargement des données ---
-# Pour un fichier : pack.load_data("source")
-# Pour une base : pack.load_data("source", table_or_query="ma_table")
-with Pack() as pack:
-    if pack.source_config.get("type") == "database":
-        table_or_query = pack.source_config.get("config", {}).get(
-            "table_or_query"
+    if exact:
+        grouped = (
+            lf.select(columns).group_by(columns).agg(pl.len().alias(_COUNT))
         )
-        if not table_or_query:
-            raise ValueError(
-                "For a 'database' type source, you must specify 'table_or_query' in the config."
-            )
-        pack.load_data("source", table_or_query=table_or_query)
-    else:
-        pack.load_data("source")
+        duplicates = analytics.agg(
+            grouped,
+            {"duplicates": (pl.col(_COUNT) - 1).clip(0).sum()},
+        )["duplicates"]
+        return total_rows, int(duplicates or 0), "exact"
 
-    ############################ Support single or multiple datasets
-    raw_df_source = pack.df_source
-    configured = pack.source_config.get("config", {}).get("table_or_query")
+    distinct = analytics.agg(
+        lf,
+        {"distinct": pl.struct(columns).hash().approx_n_unique()},
+    )["distinct"]
+    duplicates = max(total_rows - int(distinct or 0), 0)
+    return total_rows, duplicates, "hyperloglog"
 
-    def _load_parquet_if_path(obj):
-        try:
-            if isinstance(obj, str) and obj.lower().endswith(
-                (".parquet", ".pq")
-            ):
-                return pd.read_parquet(obj, engine="pyarrow")
-        except Exception:
-            pass
-        return obj
 
-    if isinstance(raw_df_source, list):
-        loaded = [_load_parquet_if_path(x) for x in raw_df_source]
-        if isinstance(configured, (list, tuple)) and len(configured) == len(
-            loaded
-        ):
-            items = list(zip(list(configured), loaded))
-            names_for_detect = [str(n) for n in configured]
-        else:
-            base = pack.source_config["name"]
-            items = [(f"{base}_{i+1}", df) for i, df in enumerate(loaded)]
-            names_for_detect = [name for name, _ in items]
-    else:
-        items = [
-            (pack.source_config["name"], _load_parquet_if_path(raw_df_source))
-        ]
-        names_for_detect = None
+def duplicate_rows(
+    lf: "pl.LazyFrame",
+    uniqueness_columns: Sequence[str],
+    *,
+    limit: int,
+) -> Tuple[int, "pl.DataFrame"]:
+    """Rows that belong to a duplicated key group, exact count and bounded rows.
 
-    raw_items_list = (
-        raw_df_source if isinstance(raw_df_source, list) else [raw_df_source]
-    )
-    treat_chunks_as_one, auto_named, common_base_detected = (
-        detect_chunked_from_items(
-            raw_items_list, names_for_detect, pack.source_config["name"]
-        )
+    The count comes from the engine; the rows go through
+    :func:`analytics.failures`, which caps them inside the lazy plan so the cap
+    holds however many rows are duplicated.
+    """
+    columns = list(lf.collect_schema().keys())
+    keys = list(uniqueness_columns)
+
+    counts = lf.group_by(keys).agg(pl.len().alias(_COUNT))
+    # nulls_equal mirrors group_by, which puts null keys in a group of their
+    # own; without it, duplicated all-null keys would be counted but never
+    # exported.
+    with_counts = lf.join(counts, on=keys, how="left", nulls_equal=True)
+
+    return analytics.failures(
+        with_counts,
+        pl.col(_COUNT) > 1,
+        limit=limit,
+        columns=columns,
     )
 
-    # Process: either per dataset or aggregate across chunks into one scope
-    # Get parquet paths for Polars processing
-    parquet_paths = [
-        p
-        for p in raw_items_list
-        if isinstance(p, str) and p.lower().endswith((".parquet", ".pq"))
+
+def duplicate_metrics(
+    dataset: str,
+    total_rows: int,
+    duplicates: int,
+    method: str,
+) -> List[Dict[str, Any]]:
+    """Dataset-scoped metrics for one dataset.
+
+    ``*_method`` siblings let the UI label a number as approximate instead of
+    presenting a HyperLogLog estimate as a fact.
+    """
+    duplication_rate = duplicates / total_rows if total_rows > 0 else 0.0
+    score = max(0.0, min(1.0, 1.0 - duplication_rate))
+    distinct_count = max(total_rows - duplicates, 0)
+    distinct_percent = distinct_count / total_rows if total_rows > 0 else 0.0
+    scope = {"perimeter": "dataset", "value": dataset}
+
+    return [
+        {"key": "score", "value": str(round(score, 2)), "scope": scope},
+        {"key": "duplicates", "value": int(duplicates), "scope": scope},
+        {"key": "duplicates_method", "value": method, "scope": scope},
+        {
+            "key": "distinct_count",
+            "value": int(distinct_count),
+            "scope": scope,
+        },
+        {
+            "key": "distinct_percent",
+            "value": str(round(distinct_percent, 4)),
+            "scope": scope,
+        },
+        {"key": "distinct_count_method", "value": method, "scope": scope},
+        {"key": "rows", "value": int(total_rows), "scope": scope},
     ]
-    use_polars_direct = POLARS_AVAILABLE and len(parquet_paths) > 0
 
-    if treat_chunks_as_one:
-        if (
-            "job" in pack.pack_config
-            and "compute_uniqueness_columns" in pack.pack_config["job"]
-            and len(pack.pack_config["job"]["compute_uniqueness_columns"]) > 0
-        ):
-            uniqueness_columns = pack.pack_config["job"][
-                "compute_uniqueness_columns"
+
+def _export_limit(pack_config: Dict[str, Any]) -> int:
+    job = pack_config.get("job") or {}
+    raw = job.get("duplicate_rows_limit", DEFAULT_DUPLICATE_ROWS_LIMIT)
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError):
+        limit = DEFAULT_DUPLICATE_ROWS_LIMIT
+    return max(0, min(limit, MAX_DUPLICATE_ROWS_LIMIT))
+
+
+def write_excel(frame: "pl.DataFrame", path: str) -> str:
+    """Write a bounded frame to xlsx, falling back to csv without openpyxl.
+
+    Only ever called with a frame that is already capped, so the whole sheet is
+    held in memory on purpose.
+    """
+    try:
+        from openpyxl import Workbook
+    except ImportError:  # pragma: no cover - depends on the install extras
+        csv_path = os.path.splitext(path)[0] + ".csv"
+        logger.warning(
+            "openpyxl is not installed, writing %s instead of %s",
+            csv_path,
+            path,
+        )
+        frame.write_csv(csv_path)
+        return csv_path
+
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("duplicates")
+    sheet.append(list(frame.columns))
+    for row in frame.iter_rows():
+        sheet.append(
+            [
+                (
+                    value
+                    if isinstance(value, (int, float, str, type(None)))
+                    else str(value)
+                )
+                for value in row
             ]
+        )
+    workbook.save(path)
+    return path
+
+
+def main() -> None:
+    with Pack() as pack:
+        if pack.source_config.get("type") == "database":
+            table_or_query = pack.source_config.get("config", {}).get(
+                "table_or_query"
+            )
+            if not table_or_query:
+                raise ValueError(
+                    "For a 'database' type source, you must specify "
+                    "'table_or_query' in the config."
+                )
+            pack.load_data("source", table_or_query=table_or_query)
         else:
-            uniqueness_columns = list(items[0][1].columns)
+            pack.load_data("source")
 
-        # Try Polars streaming first (most memory efficient)
-        if use_polars_direct:
-            try:
-                total_rows, total_duplicates = _count_duplicates_polars(
-                    parquet_paths, uniqueness_columns
-                )
-                duplication_rate = (
-                    total_duplicates / total_rows if total_rows > 0 else 0
-                )
-                score = max(0.0, min(1.0, 1.0 - duplication_rate))
+        job = pack.pack_config.get("job") or {}
+        # Exact by default: see duplicate_counts() for why the approximate
+        # distinct count is a poor basis for a duplication rate.
+        exact = bool(job.get("exact", True))
+        limit = _export_limit(pack.pack_config)
 
-                pack.metrics.data.append(
-                    {
-                        "key": "score",
-                        "value": str(round(score, 2)),
-                        "scope": {
-                            "perimeter": "dataset",
-                            "value": pack.source_config["name"],
-                        },
-                    }
-                )
-                pack.metrics.data.append(
-                    {
-                        "key": "duplicates",
-                        "value": int(total_duplicates),
-                        "scope": {
-                            "perimeter": "dataset",
-                            "value": pack.source_config["name"],
-                        },
-                    }
-                )
-                #  distinct_count and distinct_percent metrics
-                distinct_count = total_rows - total_duplicates
-                distinct_percent = (
-                    distinct_count / total_rows if total_rows > 0 else 0
-                )
-                pack.metrics.data.append(
-                    {
-                        "key": "distinct_count",
-                        "value": int(distinct_count),
-                        "scope": {
-                            "perimeter": "dataset",
-                            "value": pack.source_config["name"],
-                        },
-                    }
-                )
-                pack.metrics.data.append(
-                    {
-                        "key": "distinct_percent",
-                        "value": str(round(distinct_percent, 4)),
-                        "scope": {
-                            "perimeter": "dataset",
-                            "value": pack.source_config["name"],
-                        },
-                    }
-                )
+        tables = pack.tables("source")
+        # One logical object is one dataset. The parts of a chunked object are
+        # already one LazyFrame, so there is nothing left to "treat as one".
+        single = len(tables) == 1
+        source_name = pack.source_config["name"]
 
-                if score < 0.9:
-                    pack.recommendations.data.append(
-                        {
-                            "content": f"dataset '{pack.source_config['name']}' has a duplication rate of {duplication_rate*100:.1f}% on the scope {list(uniqueness_columns)}.",
-                            "type": "Duplicates",
-                            "scope": {
-                                "perimeter": "dataset",
-                                "value": pack.source_config["name"],
-                            },
-                            "level": determine_recommendation_level(
-                                duplication_rate
-                            ),
-                        }
-                    )
+        first_table: Optional[str] = None
+        first_keys: List[str] = []
 
-                logger.info(
-                    f"Polars duplicate detection: {total_duplicates} duplicates out of {total_rows} rows"
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Polars duplicate detection failed: {e}, falling back to pandas aggregator"
-                )
-                use_polars_direct = False
-
-        if not use_polars_direct:
-            # Fallback to DuplicateAggregator (pandas-based)
-            dup_agg = DuplicateAggregator(uniqueness_columns)
-            for dataset_label, df_curr in items:
-                dup_agg.add_df(df_curr)
-            metrics, recommendations = dup_agg.finalize_metrics(
-                pack.source_config["name"]
+        for table in tables:
+            dataset = source_name if single else table
+            lf = pack.scan("source", table)
+            schema = pack.schema("source", table)
+            uniqueness_columns = resolve_uniqueness_columns(
+                pack.pack_config, schema
             )
-            pack.metrics.data.extend(metrics)
-            try:
-                score_item = next(
-                    m for m in metrics if m.get("key") == "score"
-                )
-                score_val = float(score_item.get("value", 1.0))
-                duplication_rate = 1.0 - score_val
-                if score_val < 0.9:
-                    pack.recommendations.data.append(
-                        {
-                            "content": f"dataset '{pack.source_config['name']}' has a duplication rate of {duplication_rate*100}% on the scope {list(uniqueness_columns)}.",
-                            "type": "Duplicates",
-                            "scope": {
-                                "perimeter": "dataset",
-                                "value": pack.source_config["name"],
-                            },
-                            "level": determine_recommendation_level(
-                                duplication_rate
-                            ),
-                        }
-                    )
-            except StopIteration:
-                pass
-    else:
-        for dataset_label, df_curr in items:
-            if (
-                "job" in pack.pack_config
-                and "compute_uniqueness_columns" in pack.pack_config["job"]
-                and len(pack.pack_config["job"]["compute_uniqueness_columns"])
-                > 0
-            ):
-                uniqueness_columns = pack.pack_config["job"][
-                    "compute_uniqueness_columns"
-                ]
-            else:
-                uniqueness_columns = list(df_curr.columns)
-
-            print("Columns used for checking duplicates:", uniqueness_columns)
-            df_subset = df_curr[uniqueness_columns].copy()
-            duplicates = df_subset.duplicated()
-            total_rows = len(df_curr)
-            total_duplicates = duplicates.sum()
-
-            print("[", dataset_label, "] total rows " + str(total_rows))
-            print(
-                "[",
-                dataset_label,
-                "] total duplicates " + str(total_duplicates),
+            logger.info(
+                "[%s] checking duplicates on %s",
+                dataset,
+                uniqueness_columns,
             )
 
-            duplication_score = round(
-                total_duplicates / total_rows if total_rows > 0 else 0, 2
+            total_rows, duplicates, method = duplicate_counts(
+                lf, uniqueness_columns, exact=exact
             )
-            score = 1 - duplication_score
+            logger.info(
+                "[%s] %s duplicates out of %s rows (%s)",
+                dataset,
+                duplicates,
+                total_rows,
+                method,
+            )
 
-            pack.metrics.data.append(
-                {
-                    "key": "score",
-                    "value": str(round(score, 2)),
-                    "scope": {"perimeter": "dataset", "value": dataset_label},
-                }
+            pack.metrics.data.extend(
+                duplicate_metrics(dataset, total_rows, duplicates, method)
             )
-            pack.metrics.data.append(
-                {
-                    "key": "duplicates",
-                    "value": int(total_duplicates),
-                    "scope": {"perimeter": "dataset", "value": dataset_label},
-                }
-            )
-            #  distinct_count and distinct_percent metrics
-            distinct_count = total_rows - total_duplicates
-            distinct_percent = (
-                distinct_count / total_rows if total_rows > 0 else 0
-            )
-            pack.metrics.data.append(
-                {
-                    "key": "distinct_count",
-                    "value": int(distinct_count),
-                    "scope": {"perimeter": "dataset", "value": dataset_label},
-                }
-            )
-            pack.metrics.data.append(
-                {
-                    "key": "distinct_percent",
-                    "value": str(round(distinct_percent, 4)),
-                    "scope": {"perimeter": "dataset", "value": dataset_label},
-                }
-            )
-            if (
-                "job" in pack.pack_config
-                and "compute_uniqueness_columns" in pack.pack_config["job"]
-            ):
+
+            if job.get("compute_uniqueness_columns"):
+                # Legacy companion metric scoped to the uniqueness columns.
                 pack.metrics.data.append(
                     {
                         "key": "duplicates",
-                        "value": int(total_duplicates),
+                        "value": int(duplicates),
                         "scope": {
                             "perimeter": "dataset",
                             "value": ", ".join(uniqueness_columns),
@@ -364,96 +290,75 @@ with Pack() as pack:
                     }
                 )
 
-            if score < 0.9:
-                recommendation = {
-                    "content": f"dataset '{dataset_label}' has a duplication rate of {duplication_score*100}% on the scope {list(uniqueness_columns)}.",
-                    "type": "Duplicates",
-                    "scope": {"perimeter": "dataset", "value": dataset_label},
-                    "level": determine_recommendation_level(duplication_score),
+            duplication_rate = (
+                duplicates / total_rows if total_rows > 0 else 0.0
+            )
+            score = max(0.0, min(1.0, 1.0 - duplication_rate))
+            if score < SCORE_RECOMMENDATION_THRESHOLD:
+                pack.recommendations.data.append(
+                    {
+                        "content": (
+                            f"dataset '{dataset}' has a duplication rate of "
+                            f"{duplication_rate * 100:.1f}% on the scope "
+                            f"{list(uniqueness_columns)}."
+                        ),
+                        "type": "Duplicates",
+                        "scope": {"perimeter": "dataset", "value": dataset},
+                        "level": determine_recommendation_level(
+                            duplication_rate
+                        ),
+                    }
+                )
+
+            if first_table is None:
+                first_table = table
+                first_keys = uniqueness_columns
+
+        # Export the first dataset only, as before. The rows are bounded and
+        # only materialized when a report will actually be written.
+        if (
+            first_table is not None
+            and limit > 0
+            and pack.source_config.get("type") == "file"
+        ):
+            dataset = source_name if single else first_table
+            in_groups, rows = duplicate_rows(
+                pack.scan("source", first_table), first_keys, limit=limit
+            )
+            pack.metrics.data.append(
+                {
+                    "key": "duplicated_rows",
+                    "value": int(in_groups),
+                    "scope": {"perimeter": "dataset", "value": dataset},
                 }
-                pack.recommendations.data.append(recommendation)
-
-    pack.metrics.save()
-    pack.recommendations.save()
-
-    ######################## Export:
-    # Step 1: Retrieve 'id_columns' from pack_config
-    id_columns = pack.pack_config.get("job", {}).get("id_columns", [])
-
-    # Step 2: Identify duplicated rows (for the first dataset only for export simplicity)
-    export_uniqueness = pack.pack_config.get("job", {}).get(
-        "compute_uniqueness_columns"
-    ) or (list(items[0][1].columns) if items else [])
-
-    # Try Polars for efficient duplicate extraction
-    if use_polars_direct and parquet_paths:
-        try:
-            duplicated_rows = _get_duplicate_rows_polars(
-                parquet_paths,
-                list(export_uniqueness),
-                limit=MAX_DUPLICATES_TO_EXPORT,
             )
-            if len(duplicated_rows) >= MAX_DUPLICATES_TO_EXPORT:
-                print(
-                    f"Limiting duplicate export to {MAX_DUPLICATES_TO_EXPORT:,} rows"
-                )
-        except Exception as e:
-            logger.warning(
-                f"Polars duplicate extraction failed: {e}, falling back to pandas"
-            )
-            # Fallback to pandas
-            if isinstance(pack.df_source, list):
-                export_df = items[0][1]
+            if rows.height == 0:
+                logger.info("No duplicates found. No report generated.")
             else:
-                export_df = _load_parquet_if_path(pack.df_source)
-            export_duplicates = export_df[list(export_uniqueness)].duplicated()
-            duplicated_rows = export_df[export_duplicates].head(
-                MAX_DUPLICATES_TO_EXPORT
-            )
-    else:
-        if isinstance(pack.df_source, list):
-            export_df = items[0][1]
-        else:
-            export_df = _load_parquet_if_path(pack.df_source)
-        export_duplicates = export_df[list(export_uniqueness)].duplicated()
-        duplicated_rows = export_df[export_duplicates].head(
-            MAX_DUPLICATES_TO_EXPORT
-        )
-
-    # Check if there are any duplicates
-    if duplicated_rows.empty:
-        print("No duplicates found. No report will be generated.")
-    else:
-        # Step 3: Set index or create 'index' column for the Excel export
-        if id_columns:
-            # Ensure all id_columns are in the DataFrame columns
-            valid_id_columns = [
-                col for col in id_columns if col in duplicated_rows.columns
-            ]
-            if not valid_id_columns:
-                print(
-                    "None of the specified 'id_columns' are in the DataFrame. Using default index."
+                if in_groups > limit:
+                    logger.info(
+                        "Limiting duplicate export to %s of %s rows",
+                        limit,
+                        in_groups,
+                    )
+                source_file_dir = os.path.dirname(
+                    pack.source_config["config"]["path"]
                 )
-                duplicated_rows = duplicated_rows.reset_index(drop=True)
-            else:
-                duplicated_rows = duplicated_rows.set_index(valid_id_columns)
-        else:
-            # If 'id_columns' is not provided or is empty, create an 'index' column with the original DataFrame's index
-            duplicated_rows = duplicated_rows.reset_index()
+                current_date = datetime.now().strftime("%Y%m%d")
+                report_file_path = os.path.join(
+                    source_file_dir,
+                    f"{current_date}_duplicates_finder_report_"
+                    f"{source_name}.xlsx",
+                )
+                written = write_excel(rows, report_file_path)
+                logger.info(
+                    "Duplicated rows have been exported to %s", written
+                )
 
-        # Continue with the export process
-        if pack.source_config["type"] == "file":
-            source_file_dir = os.path.dirname(
-                pack.source_config["config"]["path"]
-            )
-            current_date = datetime.now().strftime("%Y%m%d")
-            report_file_path = os.path.join(
-                source_file_dir,
-                f'{current_date}_duplicates_finder_report_{pack.source_config["name"]}.xlsx',
-            )
+        pack.metrics.save()
+        pack.recommendations.save()
 
-            # Export duplicated rows to an Excel file
-            duplicated_rows.to_excel(
-                report_file_path, index=False
-            )  # Set index=False as 'original_index' is now a column
-            print(f"Duplicated rows have been exported to {report_file_path}")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    main()

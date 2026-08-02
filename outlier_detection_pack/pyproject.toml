@@ -1,6 +1,6 @@
 [project]
 name = "outlier_detection-pack"
-version = "1.0.0"
+version = "3.0.0"
 description = "outlier_detection pack"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
@@ -8,15 +8,18 @@ authors = [
 license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
+# pyod / scikit-learn / numpy / pandas / seaborn / statsmodels / xlsxwriter are
+# gone with the KNN detector and the Excel export. scikit-learn was never even
+# declared here: it only ever resolved transitively through pyod, so a pyod
+# release that dropped it would have broken this pack at runtime.
 dependencies = [
-    "qalita-core>=1.5.0",
-    "pyod>=1.1.2",
-    "numpy>=2.0.0",
-    "pandas>=2.1.1",
-    "matplotlib>=3.8.0",
-    "seaborn>=0.13.2",
-    "statsmodels>=0.14.2",
-    "xlsxwriter>=3.2.0",
+    "qalita-core>=2.0.0",
+    "polars>=1.25.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
 ]
 
 [build-system]

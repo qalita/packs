@@ -7,8 +7,8 @@ compatible_sources:
 - csv
 - excel
 - folder
-description: Automatic Outliers Detection using pyod. This pack is used to detect
-  outliers in a dataset using pyod.
+description: Automatic outlier detection using streaming IQR or z-score fences.
+  Two passes over the source, memory independent of the row count.
 icon: icon.png
 name: outlier_detection
 tags:
@@ -18,5 +18,5 @@ tags:
 - IoT
 type: reasonability
 url: https://github.com/qalita/packs/tree/main/outlier_detection_pack
-version: 2.0.38
+version: 3.0.0
 visibility: public

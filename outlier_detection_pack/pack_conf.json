@@ -1,7 +1,11 @@
 {
     "job": {
+        "method": "iqr",
+        "iqr_multiplier": 1.5,
+        "zscore_threshold": 3.0,
+        "exact": false,
         "normality_threshold": 0.90,
-        "outlier_threshold": 0.5,
+        "example_rows": 10,
         "id_columns": [],
         "source": {
             "skiprows": 0

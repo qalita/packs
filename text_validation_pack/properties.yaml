@@ -18,5 +18,5 @@ tags:
 - Completeness
 type: validity
 url: https://github.com/qalita/packs/tree/main/text_validation_pack
-version: 0.1.1
+version: 0.2.0
 visibility: public

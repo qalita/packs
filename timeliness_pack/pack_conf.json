@@ -1,6 +1,8 @@
 {
     "job": {
         "compute_score_columns": [],
+        "examples_limit": 10,
+        "max_example_columns": 20,
         "source": {
             "skiprows": 0
         }

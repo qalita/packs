@@ -1528,15 +1528,17 @@ wheels = [
 
 [[package]]
 name = "referential-integrity-pack"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "polars" },
     { name = "pyarrow" },
     { name = "qalita-core" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "polars", specifier = ">=1.0.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
     { name = "qalita-core", specifier = ">=1.5.0" },
 ]

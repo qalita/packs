@@ -1,6 +1,6 @@
 [project]
 name = "pattern-validation-pack"
-version = "0.1.0"
+version = "0.2.0"
 description = "Validates data formats using predefined patterns and custom regex rules"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
@@ -9,8 +9,15 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
 dependencies = [
-    "qalita-core>=1.5.0",
-    "pyarrow>=24.0.0",
+    "qalita-core>=2.0.0",
+    # Declared explicitly rather than inherited from qalita-core: this pack
+    # calls polars directly and needs the streaming engine (>=1.25).
+    "polars>=1.25.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
 ]
 
 [build-system]
