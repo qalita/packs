@@ -108,8 +108,13 @@ with Pack() as pack:
     total_checks = 0
     total_valid_percent = 0
 
-    # Résultats par contrôle, accumulés pour les figures.
-    check_outcomes = []
+    # Résultats par colonne, accumulés pour les figures. Une même colonne peut être
+    # validée plusieurs fois (source chunkée par qalita_core, ou plusieurs règles
+    # ciblant la même colonne dans pack_conf) : on ne compte qu'un contrôle par
+    # colonne et on additionne ses violations, pour ne produire qu'une ligne par
+    # colonne — le dédoublonneur de dimensions du moteur exige un agrégat, pas les
+    # exécutions brutes.
+    check_outcomes = {}
 
     pack.figures.declare_measure(
         "score",
@@ -177,13 +182,11 @@ with Pack() as pack:
             # Validate range
             result = validate_range(col_data, min_value, max_value)
 
-            check_outcomes.append(
-                {
-                    "column": column,
-                    "n_violations": int(
-                        result["below_min"] + result["above_max"]
-                    ),
-                }
+            outcome_entry = check_outcomes.setdefault(
+                column, {"column": column, "n_violations": 0}
+            )
+            outcome_entry["n_violations"] += int(
+                result["below_min"] + result["above_max"]
             )
 
             # Add metrics ( naming convention)
@@ -373,9 +376,12 @@ with Pack() as pack:
 
     if check_outcomes:
         # Verdicts : une composition dont les modalités sont pass/fail. Le moteur
-        # leur donne les couleurs de statut, toujours avec icône et libellé.
+        # leur donne les couleurs de statut, toujours avec icône et libellé. Un
+        # contrôle par colonne (voir la collecte plus haut), donc pas de double
+        # comptage même si la source est chunkée ou si plusieurs règles ciblent la
+        # même colonne.
         outcome = {"pass": 0, "fail": 0}
-        for entry in check_outcomes:
+        for entry in check_outcomes.values():
             outcome["fail" if entry["n_violations"] > 0 else "pass"] += 1
         pack.figures.add(
             "checks_outcome",
@@ -388,7 +394,9 @@ with Pack() as pack:
         )
 
         # Ventilation des valeurs hors bornes : ce qui explique un score dégradé.
-        violations = [e for e in check_outcomes if e["n_violations"] > 0]
+        violations = [
+            e for e in check_outcomes.values() if e["n_violations"] > 0
+        ]
         if violations:
             pack.figures.add(
                 "violations_by_column",
