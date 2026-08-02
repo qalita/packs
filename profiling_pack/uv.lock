@@ -1271,7 +1271,7 @@ requires-dist = [
     { name = "numpy", specifier = "<3.0.0" },
     { name = "openpyxl", specifier = ">=3.1.2" },
     { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "qalita-core", specifier = ">=1.5.0" },
+    { name = "qalita-core", specifier = ">=1.7.0" },
     { name = "ydata-profiling", specifier = ">=4.6.0" },
 ]
 
@@ -1625,7 +1625,7 @@ wheels = [
 
 [[package]]
 name = "qalita-core"
-version = "1.5.1"
+version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-storage-blob" },
@@ -1658,9 +1658,9 @@ dependencies = [
     { name = "teradatasqlalchemy" },
     { name = "trino" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/d2/02a8a11a7f6d7ca16ffe787e1d6a64d8033091e6069c6f639a24ab58f64b/qalita_core-1.5.1.tar.gz", hash = "sha256:c32708bff20ec358cf94931c40681d1c7b129eb3617d65ea7959e714d9dc2b82", size = 1461494, upload-time = "2026-02-03T16:11:32.02Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/d0/937bee15f3771afb15183816616238b48f40bdedaa325fb81fb61997e6aa/qalita_core-1.7.0.tar.gz", hash = "sha256:c85817578783261f5e7baad5188291c8c46f42cecf2ed1bd4ea761bb1c8af1c7", size = 1480979, upload-time = "2026-08-02T12:16:56.097Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/06/0e9e97841cb662e1dc9700d26ea7be5df73d9a1660f40bfe46d333e33c7a/qalita_core-1.5.1-py3-none-any.whl", hash = "sha256:d1d725ff67e34e6a812f030db4078d30964e7554eec39bee9b05371fd323e4bd", size = 37679, upload-time = "2026-02-03T16:11:29.84Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/af/9483c0b663cf7b9a1e14c0b6a5ee6f8633951b4cb8a88220f13447262866/qalita_core-1.7.0-py3-none-any.whl", hash = "sha256:3478d9bfe2af0d6eacf8b2cb01cb094dbe5ff0d5beaa5c253a44601749dd0abc", size = 43519, upload-time = "2026-08-02T12:16:54.439Z" },
 ]
 
 [[package]]
