@@ -11,6 +11,7 @@ from typing import List, Optional
 
 import polars as pl
 
+from omop_dqd.checks._common import _row_count, guard, require_columns
 from omop_dqd.registry import register
 from omop_dqd.results import CheckResult, counted, not_applicable
 
@@ -35,10 +36,6 @@ _NO_UNIT_SENTINEL = "-1"
 # concept_plausible_unit_concept_ids.sql -- it is reserved for
 # standardConceptRecordCompleteness (see that SQL file's own comment).
 _UNMAPPED_UNIT = 0
-
-
-def _row_count(frame: pl.LazyFrame) -> int:
-    return frame.select(pl.len()).collect(engine="streaming").item()
 
 
 def _int_list(raw: str) -> List[int]:
@@ -102,16 +99,16 @@ def _plausible_gender(ctx, chk, use_descendants: bool) -> CheckResult:
     ``ca.ancestor_concept_id IN (@conceptId)`` against
     CONCEPT_ANCESTOR (a real IN list, descendant-expanded).
     """
-    if not ctx.has_table(chk.cdm_table_name):
-        return not_applicable(
-            f"table {chk.cdm_table_name} is absent from the source"
-        )
-    if not ctx.has_column(chk.cdm_table_name, chk.cdm_field_name):
-        return not_applicable(
-            f"column {chk.qualified_field} is absent from the source"
-        )
+    skip = guard(ctx, chk)
+    if skip:
+        return skip
     if not ctx.has_table("PERSON"):
         return not_applicable("PERSON is absent from the source")
+    missing = require_columns(
+        ctx, "PERSON", "person_id", "gender_concept_id"
+    ) or require_columns(ctx, chk.cdm_table_name, "person_id")
+    if missing:
+        return missing
 
     expected_gender = _expected_gender(chk)
     if expected_gender is None:
@@ -126,6 +123,14 @@ def _plausible_gender(ctx, chk, use_descendants: bool) -> CheckResult:
             return not_applicable("no concept id on the check instance")
         if not ctx.has_table("CONCEPT_ANCESTOR"):
             return not_applicable("CONCEPT_ANCESTOR is absent from the source")
+        missing = require_columns(
+            ctx,
+            "CONCEPT_ANCESTOR",
+            "ancestor_concept_id",
+            "descendant_concept_id",
+        )
+        if missing:
+            return missing
         # Deliberately NOT deduplicated. Upstream's own SQL is a
         # literal, un-DISTINCT-ed join --
         # ``JOIN concept_ancestor ca ON ca.descendant_concept_id =
@@ -194,14 +199,9 @@ def plausible_unit_concept_ids(ctx, chk) -> CheckResult:
     unlike the general ``NOT IN (list, 0)`` branch, where -1 could
     appear as an allowed list member.
     """
-    if not ctx.has_table(chk.cdm_table_name):
-        return not_applicable(
-            f"table {chk.cdm_table_name} is absent from the source"
-        )
-    if not ctx.has_column(chk.cdm_table_name, chk.cdm_field_name):
-        return not_applicable(
-            f"column {chk.qualified_field} is absent from the source"
-        )
+    skip = guard(ctx, chk)
+    if skip:
+        return skip
     if not ctx.has_column(chk.cdm_table_name, "unit_concept_id"):
         return not_applicable(
             f"{chk.cdm_table_name} has no unit_concept_id column"

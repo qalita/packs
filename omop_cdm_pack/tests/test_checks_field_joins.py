@@ -15,6 +15,7 @@ from omop_dqd.catalog import CheckInstance
 from omop_dqd.context import CdmContext
 from omop_dqd.registry import get_check
 from omop_dqd.results import CheckStatus
+from omop_dqd.runner import run_checks
 
 
 def _run(ctx, check_name, table, field, **params):
@@ -352,6 +353,57 @@ def test_within_visit_dates_pins_the_seven_day_grace_period(tmp_path):
     assert result.num_denominator_rows == 2
 
 
+def test_within_visit_dates_denominator_keeps_null_checked_dates(tmp_path):
+    """The denominator is an UNFILTERED inner join to VISIT_OCCURRENCE.
+
+    field_within_visit_dates.sql's denominator subquery is
+
+        SELECT COUNT_BIG(*) FROM @cdmTableName cdmTable
+        JOIN visit_occurrence vo
+          ON cdmTable.visit_occurrence_id = vo.visit_occurrence_id
+
+    with no WHERE clause at all -- unlike several of its neighbours,
+    it does NOT filter on the checked field being non-null. So a row
+    with a NULL checked date, matched to a real visit, counts in the
+    denominator (and, NULL comparisons being falsy, can never be a
+    violation). Adding a plausible-looking
+    `.filter(event.is_not_null())` to the denominator would drop it
+    to 2 and every pct this check reports would drift upwards.
+    """
+    ctx = _write_tables(
+        tmp_path,
+        VISIT_OCCURRENCE=pl.DataFrame(
+            {
+                "visit_occurrence_id": [1],
+                "person_id": [1],
+                "visit_start_date": ["2020-01-10"],
+                "visit_end_date": ["2020-01-20"],
+            }
+        ).with_columns(
+            pl.col("visit_start_date").str.to_date(),
+            pl.col("visit_end_date").str.to_date(),
+        ),
+        CONDITION_OCCURRENCE=pl.DataFrame(
+            {
+                "person_id": [1, 1, 1],
+                # in-window, far out of window, and NULL
+                "condition_start_date": ["2020-01-15", "2021-01-01", None],
+                "visit_occurrence_id": [1, 1, 1],
+            },
+            schema_overrides={"condition_start_date": pl.Utf8},
+        ).with_columns(pl.col("condition_start_date").str.to_date()),
+    )
+
+    result = _run(
+        ctx,
+        "withinVisitDates",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.num_violated_rows == 1
+    assert result.num_denominator_rows == 3
+
+
 def test_plausible_temporal_after_same_table(mini_cdm):
     # condition_end_date must occur on/after condition_start_date;
     # row 101 has a start date (2015-06-01) after its end date
@@ -443,3 +495,207 @@ def test_plausible_temporal_after_unreachable_cross_table_combo(
         plausibleTemporalAfterFieldName="visit_start_date",
     )
     assert result.status == CheckStatus.NOT_APPLICABLE
+
+
+# --- guard depth: a present secondary table with a missing column ------
+#
+# guard() only covers a check's OWN table and field. Every check that
+# reads a SECOND table must also declare which of that table's columns
+# it selects (checks/_common.require_columns), or Polars raises on the
+# missing column and runner.py records the whole check as ERROR. These
+# pin that the whole family degrades to NOT_APPLICABLE instead, so the
+# same class of defect never reports two different ways.
+
+
+def _minimal_condition_occurrence():
+    return pl.DataFrame(
+        {
+            "person_id": [1],
+            "condition_concept_id": [201826],
+            "condition_start_date": ["2020-01-01"],
+            "visit_occurrence_id": [1],
+        }
+    ).with_columns(pl.col("condition_start_date").str.to_date())
+
+
+def test_plausible_before_death_is_na_when_death_lacks_death_date(tmp_path):
+    ctx = _write_tables(
+        tmp_path,
+        CONDITION_OCCURRENCE=_minimal_condition_occurrence(),
+        # DEATH exists, but without the column the check reads.
+        DEATH=pl.DataFrame({"person_id": [1]}),
+    )
+    result = _run(
+        ctx,
+        "plausibleBeforeDeath",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.status == CheckStatus.NOT_APPLICABLE
+    assert "DEATH.death_date" in result.message
+
+
+def test_plausible_during_life_is_na_when_death_lacks_death_date(tmp_path):
+    ctx = _write_tables(
+        tmp_path,
+        CONDITION_OCCURRENCE=_minimal_condition_occurrence(),
+        DEATH=pl.DataFrame({"person_id": [1]}),
+    )
+    result = _run(
+        ctx,
+        "plausibleDuringLife",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.status == CheckStatus.NOT_APPLICABLE
+
+
+def test_plausible_after_birth_is_na_when_person_lacks_year_of_birth(
+    tmp_path,
+):
+    ctx = _write_tables(
+        tmp_path,
+        CONDITION_OCCURRENCE=_minimal_condition_occurrence(),
+        PERSON=pl.DataFrame({"person_id": [1]}),
+    )
+    result = _run(
+        ctx,
+        "plausibleAfterBirth",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.status == CheckStatus.NOT_APPLICABLE
+    assert "PERSON.year_of_birth" in result.message
+
+
+def test_within_visit_dates_is_na_when_visit_lacks_its_dates(tmp_path):
+    ctx = _write_tables(
+        tmp_path,
+        CONDITION_OCCURRENCE=_minimal_condition_occurrence(),
+        VISIT_OCCURRENCE=pl.DataFrame(
+            {"visit_occurrence_id": [1], "person_id": [1]}
+        ),
+    )
+    result = _run(
+        ctx,
+        "withinVisitDates",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.status == CheckStatus.NOT_APPLICABLE
+    assert "VISIT_OCCURRENCE.visit_start_date" in result.message
+
+
+def test_fk_domain_is_na_when_concept_lacks_domain_id(tmp_path):
+    ctx = _write_tables(
+        tmp_path,
+        CONDITION_OCCURRENCE=_minimal_condition_occurrence(),
+        CONCEPT=pl.DataFrame({"concept_id": [201826]}),
+    )
+    result = _run(
+        ctx,
+        "fkDomain",
+        "CONDITION_OCCURRENCE",
+        "condition_concept_id",
+        value="Condition",
+    )
+    assert result.status == CheckStatus.NOT_APPLICABLE
+    assert "CONCEPT.domain_id" in result.message
+
+
+def test_guard_depth_reports_not_applicable_through_the_runner(tmp_path):
+    """The same case, end to end: NOT_APPLICABLE, never ERROR.
+
+    Asserted through run_checks rather than the check function alone,
+    because ERROR is something the runner manufactures from a raised
+    exception -- a check that raises looks identical to one that
+    returns until the runner has hold of it.
+    """
+    ctx = _write_tables(
+        tmp_path,
+        CONDITION_OCCURRENCE=_minimal_condition_occurrence(),
+        DEATH=pl.DataFrame({"person_id": [1]}),
+        PERSON=pl.DataFrame({"person_id": [1]}),
+        VISIT_OCCURRENCE=pl.DataFrame(
+            {"visit_occurrence_id": [1], "person_id": [1]}
+        ),
+        CONCEPT=pl.DataFrame({"concept_id": [201826]}),
+    )
+    catalog = [
+        CheckInstance(
+            check_name=name,
+            check_level="FIELD",
+            cdm_table_name="CONDITION_OCCURRENCE",
+            cdm_field_name=field,
+            threshold=0.0,
+            severity="fatal",
+            kahn_category="Plausibility",
+            description="d",
+            param_items=params,
+        )
+        for name, field, params in (
+            ("plausibleBeforeDeath", "condition_start_date", ()),
+            ("plausibleDuringLife", "condition_start_date", ()),
+            ("plausibleAfterBirth", "condition_start_date", ()),
+            ("withinVisitDates", "condition_start_date", ()),
+            ("fkDomain", "condition_concept_id", (("value", "Condition"),)),
+            (
+                "fkClass",
+                "condition_concept_id",
+                (("value", "Clinical Finding"),),
+            ),
+            ("isStandardValidConcept", "condition_concept_id", ()),
+        )
+    ]
+    results = run_checks(ctx, catalog)
+    assert len(results) == len(catalog)
+    assert all(
+        r.result.status == CheckStatus.NOT_APPLICABLE for r in results
+    ), [(r.instance.check_name, r.result.status) for r in results]
+
+
+# --- string date columns ---------------------------------------------
+#
+# properties.yaml advertises `file` and `folder` sources, where a date
+# plausibly arrives as text rather than a parquet Date. checks/_common
+# .as_date routes those through str.to_date(strict=False) instead of
+# the deprecated, strict String->Date cast.
+
+
+def test_date_checks_work_on_string_date_columns(tmp_path):
+    """A CSV-shaped source, with an unparseable date in the mix.
+
+    `.cast(pl.Date)` would both emit a DeprecationWarning (removed in
+    Polars 2.0) and raise on "not-a-date", which runner.py would turn
+    into an ERROR for the whole check. Instead the bad value parses to
+    NULL, and a NULL date is never a violation -- the same outcome the
+    upstream SQL reaches on a value its own server cannot compare.
+    """
+    ctx = _write_tables(
+        tmp_path,
+        DEATH=pl.DataFrame(
+            {"person_id": [1, 2], "death_date": ["2020-01-01", "2020-01-01"]}
+        ),
+        CONDITION_OCCURRENCE=pl.DataFrame(
+            {
+                "person_id": [1, 1, 2],
+                # well past the 60-day grace, inside it, unparseable
+                "condition_start_date": [
+                    "2021-01-01",
+                    "2020-02-01",
+                    "not-a-date",
+                ],
+            }
+        ),
+    )
+    assert ctx.dtypes("DEATH")["death_date"] == pl.Utf8
+
+    result = _run(
+        ctx,
+        "plausibleBeforeDeath",
+        "CONDITION_OCCURRENCE",
+        "condition_start_date",
+    )
+    assert result.status != CheckStatus.ERROR
+    assert result.num_violated_rows == 1
+    assert result.num_denominator_rows == 3

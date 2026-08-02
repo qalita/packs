@@ -33,8 +33,13 @@ def _group_by_table(
 ) -> Dict[str, List[CheckInstance]]:
     """Group instances so each CDM table is handled together.
 
-    Polars caches the parquet scan per table, so grouping keeps the
-    working set small and the file handles few.
+    This buys locality, not caching. There is no scan cache to hit:
+    ctx.table() builds a fresh pl.scan_parquet on every call, so a
+    614-call run really does open 614 scans whatever the order. What
+    grouping does give is that consecutive checks read the same
+    parquet files, so the OS page cache is still warm from the
+    previous one -- and that the progress log reads as one line per
+    CDM table instead of interleaved noise.
     """
     grouped = defaultdict(list)
     for instance in catalog:

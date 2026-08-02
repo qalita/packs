@@ -1,6 +1,6 @@
 """Aggregation of check results into QALITA metrics and recommendations.
 
-Tasks 5-10 produce one EvaluatedCheck per catalog instance (~2539 of
+Tasks 5-10 produce one EvaluatedCheck per catalog instance (~2535 of
 them against the vendored 5.4 catalog). Nobody consumes that many
 metrics: this module collapses them into the handful of numbers the
 QALITA platform actually displays (an overall dataset score, one score
@@ -152,13 +152,20 @@ def build_metrics(
         `results` (conformance/completeness/plausibility);
       - one table-scoped "score" and "fatal_failure_count" per CDM
         table present in `results`;
-      - one "pct_violated_rows" per *failing* check, scoped to the
-        column it failed on ("TABLE.field"), or to the table itself
-        for table-level checks, which have no field.
+      - one "<checkName>_pct_violated_rows" per *failing* check,
+        scoped to the column it failed on ("TABLE.field"), or to the
+        table itself for table-level checks, which have no field.
+        The check name is part of the KEY, not just the scope,
+        because a single column routinely fails several different
+        checks -- CONDITION_OCCURRENCE.condition_start_date fails 6
+        of them against the test fixture alone. A bare
+        "pct_violated_rows" key would give those 6 facts one
+        identical key+scope pair, and a consumer keyed on key+scope
+        would display one arbitrary winner.
 
     The last bucket is deliberately the only one that scales with the
     number of results: everything else is bounded by the number of
-    Kahn categories (<=3) and CDM tables (<=39), so a run of ~2539
+    Kahn categories (<=3) and CDM tables (<=39), so a run of ~2535
     checks still turns into a small, dashboard-sized metric list.
     """
     metrics = [
@@ -216,7 +223,7 @@ def build_metrics(
         perimeter, scope_value = _scope_perimeter_and_value(evaluated.instance)
         metrics.append(
             _metric(
-                "pct_violated_rows",
+                f"{evaluated.instance.check_name}_pct_violated_rows",
                 evaluated.result.pct_violated_rows,
                 perimeter,
                 scope_value,
@@ -224,6 +231,75 @@ def build_metrics(
         )
 
     return metrics
+
+
+def build_schemas(
+    results: List[EvaluatedCheck], dataset_label: str
+) -> List[dict]:
+    """The table/column tree the emitted metrics hang off.
+
+    The QALITA platform builds a source's table/column tree
+    *exclusively* from schema entries (backend
+    routers/v1/sources.py): it keys tables off `perimeter == "table"`
+    and splits a `perimeter == "column"` scope value on "." to find
+    its parent table. Without these, every table- and column-scoped
+    metric this pack emits would attach to a tree that does not
+    exist.
+
+    A table is included when its own `cdmTable` check PASSed -- that
+    check is exactly "does this table exist in the source" (see
+    checks/table_level.py), so a table absent from the source never
+    enters the tree.
+
+    A column is included when some check in `results` is scoped to it
+    on an included table, whether or not that column turned out to be
+    present. That is deliberate: a column the CDM specification
+    requires but the source lacks fails `cdmField`, and that failure
+    is emitted as a column-scoped metric -- which needs a column in
+    the tree to hang off, or the finding is invisible. The tree is
+    therefore the CDM specification's shape for the tables that do
+    exist, with conformance reported against it.
+    """
+    present_tables = {
+        evaluated.instance.cdm_table_name
+        for evaluated in results
+        if evaluated.instance.check_name == "cdmTable"
+        and evaluated.result.status == CheckStatus.PASS
+    }
+
+    parent = {"perimeter": "dataset", "value": dataset_label}
+    schemas = [
+        {
+            "key": "table",
+            "value": table_name,
+            "scope": {
+                "perimeter": "table",
+                "value": table_name,
+                "parent_scope": dict(parent),
+            },
+        }
+        for table_name in sorted(present_tables)
+    ]
+
+    columns = {
+        evaluated.instance.qualified_field
+        for evaluated in results
+        if evaluated.instance.cdm_field_name is not None
+        and evaluated.instance.cdm_table_name in present_tables
+    }
+    schemas.extend(
+        {
+            "key": "column",
+            "value": qualified_field,
+            "scope": {
+                "perimeter": "column",
+                "value": qualified_field,
+                "parent_scope": dict(parent),
+            },
+        }
+        for qualified_field in sorted(columns)
+    )
+    return schemas
 
 
 def _level(pct_violated: float) -> str:

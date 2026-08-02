@@ -10,12 +10,9 @@ See the NOTICE file at the pack root.
 
 import polars as pl
 
+from omop_dqd.checks._common import _row_count, as_date, require_columns
 from omop_dqd.registry import register
 from omop_dqd.results import CheckResult, counted, not_applicable
-
-
-def _row_count(frame: pl.LazyFrame) -> int:
-    return frame.select(pl.len()).collect(engine="streaming").item()
 
 
 @register("cdmTable")
@@ -61,6 +58,9 @@ def measure_person_completeness(ctx, chk) -> CheckResult:
         )
     if not ctx.has_column(chk.cdm_table_name, "person_id"):
         return not_applicable(f"{chk.cdm_table_name} has no person_id column")
+    missing = require_columns(ctx, "PERSON", "person_id")
+    if missing:
+        return missing
     people = ctx.table("PERSON").select("person_id")
     total = _row_count(people)
     referenced = (
@@ -88,6 +88,11 @@ def measure_condition_era_completeness(ctx, chk) -> CheckResult:
         return not_applicable("CONDITION_ERA is absent from the source")
     if not ctx.has_table("CONDITION_OCCURRENCE"):
         return not_applicable("CONDITION_OCCURRENCE is absent from the source")
+    missing = require_columns(
+        ctx, "CONDITION_OCCURRENCE", "condition_concept_id", "person_id"
+    ) or require_columns(ctx, "CONDITION_ERA", "person_id")
+    if missing:
+        return missing
     occurrences = (
         ctx.table("CONDITION_OCCURRENCE")
         .filter(pl.col("condition_concept_id") != 0)
@@ -127,13 +132,23 @@ def measure_observation_period_overlap(ctx, chk) -> CheckResult:
     table = "OBSERVATION_PERIOD"
     if not ctx.has_table(table):
         return not_applicable(f"{table} is absent from the source")
+    missing = require_columns(
+        ctx,
+        table,
+        "observation_period_id",
+        "person_id",
+        "observation_period_start_date",
+        "observation_period_end_date",
+    )
+    if missing:
+        return missing
     periods = ctx.table(table).select(
         pl.col("observation_period_id"),
         pl.col("person_id"),
-        pl.col("observation_period_start_date")
-        .cast(pl.Date)
-        .alias("start_date"),
-        pl.col("observation_period_end_date").cast(pl.Date).alias("end_date"),
+        as_date(ctx, table, "observation_period_start_date").alias(
+            "start_date"
+        ),
+        as_date(ctx, table, "observation_period_end_date").alias("end_date"),
     )
     total = _row_count(periods.select("person_id").unique())
 

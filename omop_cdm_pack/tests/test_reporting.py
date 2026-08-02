@@ -5,6 +5,7 @@ from omop_dqd.reporting import (
     SEVERITY_WEIGHTS,
     build_metrics,
     build_recommendations,
+    build_schemas,
 )
 from omop_dqd.results import CheckResult, CheckStatus
 from omop_dqd.runner import run_checks
@@ -213,10 +214,41 @@ def test_pct_violated_is_emitted_only_for_failures():
         ),
         _evaluated("isRequired", CheckStatus.PASS, field="b", violated=0),
     ]
-    metrics = _by_key(build_metrics(results, "ds"), "pct_violated_rows")
+    metrics = _by_key(
+        build_metrics(results, "ds"), "isRequired_pct_violated_rows"
+    )
     assert len(metrics) == 1
     assert float(metrics[0]["value"]) == 30.0
     assert metrics[0]["scope"]["value"] == "PERSON.a"
+
+
+def test_pct_violated_key_is_discriminated_by_check_name():
+    """A single column fails several checks; each needs its own key.
+
+    Without the check name in the key, these two facts would carry an
+    identical key AND an identical scope, and a consumer keyed on
+    key+scope would show one arbitrary winner.
+    """
+    results = [
+        _evaluated("isRequired", CheckStatus.FAIL, violated=3, denominator=10),
+        _evaluated(
+            "plausibleAfterBirth",
+            CheckStatus.FAIL,
+            violated=5,
+            denominator=10,
+        ),
+    ]
+    metrics = [
+        m
+        for m in build_metrics(results, "ds")
+        if m["key"].endswith("pct_violated_rows")
+    ]
+    assert {m["key"] for m in metrics} == {
+        "isRequired_pct_violated_rows",
+        "plausibleAfterBirth_pct_violated_rows",
+    }
+    identities = {(m["key"], m["scope"]["value"]) for m in metrics}
+    assert len(identities) == len(metrics)
 
 
 def test_metric_values_are_strings():
@@ -320,7 +352,9 @@ def test_pct_violated_rows_uses_table_perimeter_for_table_level_checks():
             denominator=1,
         )
     ]
-    metrics = _by_key(build_metrics(results, "ds"), "pct_violated_rows")
+    metrics = _by_key(
+        build_metrics(results, "ds"), "cdmTable_pct_violated_rows"
+    )
     assert len(metrics) == 1
     assert metrics[0]["scope"]["perimeter"] == "table"
     assert metrics[0]["scope"]["value"] == "OBSERVATION_PERIOD"
@@ -337,7 +371,9 @@ def test_pct_violated_rows_uses_column_perimeter_for_field_level_checks():
             denominator=1,
         )
     ]
-    metrics = _by_key(build_metrics(results, "ds"), "pct_violated_rows")
+    metrics = _by_key(
+        build_metrics(results, "ds"), "isRequired_pct_violated_rows"
+    )
     assert metrics[0]["scope"]["perimeter"] == "column"
     assert metrics[0]["scope"]["value"] == "PERSON.person_id"
 
@@ -487,6 +523,105 @@ def test_recommendation_content_renders_placeholders():
     assert "@cdmTableName" not in recommendation["content"]
 
 
+# --- schemas ----------------------------------------------------------
+#
+# The QALITA platform builds a source's table/column tree from schema
+# entries alone (backend routers/v1/sources.py keys tables off
+# `perimeter == "table"` and splits column scope values on "."), so
+# without these every table- and column-scoped metric this pack emits
+# would attach to nothing.
+
+
+def _table_present(table, status=CheckStatus.PASS):
+    return _evaluated(
+        "cdmTable",
+        status,
+        table=table,
+        field=None,
+        check_level="TABLE",
+        violated=0 if status == CheckStatus.PASS else 1,
+        denominator=1,
+    )
+
+
+def test_schemas_emit_one_table_entry_per_present_table():
+    results = [
+        _table_present("PERSON"),
+        _table_present("DRUG_EXPOSURE", CheckStatus.FAIL),
+    ]
+    tables = [
+        s
+        for s in build_schemas(results, "ds")
+        if s["scope"]["perimeter"] == "table"
+    ]
+    assert [s["scope"]["value"] for s in tables] == ["PERSON"]
+    assert tables[0]["value"] == "PERSON"
+    assert tables[0]["scope"]["parent_scope"] == {
+        "perimeter": "dataset",
+        "value": "ds",
+    }
+
+
+def test_schemas_emit_qualified_column_entries():
+    results = [
+        _table_present("PERSON"),
+        _evaluated("isRequired", CheckStatus.PASS, field="person_id"),
+        _evaluated("cdmField", CheckStatus.PASS, field="year_of_birth"),
+    ]
+    columns = [
+        s
+        for s in build_schemas(results, "ds")
+        if s["scope"]["perimeter"] == "column"
+    ]
+    assert [s["scope"]["value"] for s in columns] == [
+        "PERSON.person_id",
+        "PERSON.year_of_birth",
+    ]
+    assert all(
+        s["scope"]["parent_scope"]["perimeter"] == "dataset" for s in columns
+    )
+
+
+def test_schemas_skip_columns_of_an_absent_table():
+    results = [
+        _table_present("DRUG_EXPOSURE", CheckStatus.FAIL),
+        _evaluated(
+            "isRequired",
+            CheckStatus.NOT_APPLICABLE,
+            table="DRUG_EXPOSURE",
+            field="drug_exposure_id",
+        ),
+    ]
+    assert build_schemas(results, "ds") == []
+
+
+def test_schemas_keep_a_missing_column_of_a_present_table():
+    """A required column the source lacks stays in the tree.
+
+    Its cdmField failure is emitted as a column-scoped metric; drop
+    the column from the tree and that finding has nowhere to show.
+    """
+    results = [
+        _table_present("PERSON"),
+        _evaluated("cdmField", CheckStatus.FAIL, field="care_site_id"),
+    ]
+    assert "PERSON.care_site_id" in {
+        s["scope"]["value"] for s in build_schemas(results, "ds")
+    }
+
+
+def test_schemas_are_deduplicated_across_checks_on_one_column():
+    results = [
+        _table_present("PERSON"),
+        _evaluated("isRequired", CheckStatus.PASS, field="person_id"),
+        _evaluated("isPrimaryKey", CheckStatus.FAIL, field="person_id"),
+    ]
+    schemas = build_schemas(results, "ds")
+    assert len(schemas) == len(
+        {(s["scope"]["perimeter"], s["scope"]["value"]) for s in schemas}
+    )
+
+
 # --- full-catalog sanity check --------------------------------------------
 
 
@@ -506,8 +641,12 @@ def test_full_catalog_run_produces_a_sane_report(mini_cdm):
     metrics = build_metrics(results, "mini_cdm")
     recommendations = build_recommendations(results, "mini_cdm")
 
-    pct_metrics = _by_key(metrics, "pct_violated_rows")
+    pct_metrics = [
+        m for m in metrics if m["key"].endswith("_pct_violated_rows")
+    ]
     assert len(pct_metrics) == fail_count
+    # Every emitted fact must be uniquely addressable by key+scope.
+    assert len({(m["key"], str(m["scope"])) for m in metrics}) == len(metrics)
 
     assert len(recommendations) == fatal_fail_count
 
@@ -542,7 +681,7 @@ def test_full_catalog_run_produces_a_sane_report(mini_cdm):
         assert "@conceptName" not in content
 
     # Metric volume must stay far below one metric per check result:
-    # ~2539 results collapse into a small, table/category/dataset
+    # ~2535 results collapse into a small, table/category/dataset
     # sized set (now including fatal_failure_count) plus one row per
     # failure.
     assert len(metrics) < 600

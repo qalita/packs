@@ -24,8 +24,12 @@ def test_catalog_instantiates_thousands_of_checks():
     # evaluationFilter, per docs/superpowers/plans/2026-07-31-omop-cdm-pack-revision-1.md).
     # A loose lower bound would not catch a quarter of the catalog
     # silently vanishing, so these are pinned exactly.
-    assert len(load_catalog("5.4")) == 2539
-    assert len(load_catalog("5.3")) == 2021
+    #
+    # These dropped from 2539/2021 when gating became case-sensitive to
+    # match R's `dplyr::filter(cdmDatatype=='integer')`: 5.4 loses the
+    # 4 `Integer` rows, 5.3 the 13 `Integer` + 3 `INTEGER` ones.
+    assert len(load_catalog("5.4")) == 2535
+    assert len(load_catalog("5.3")) == 2005
 
 
 def test_every_instance_carries_a_known_severity():
@@ -325,11 +329,52 @@ def test_fk_class_is_skipped_when_the_field_is_not_a_foreign_key():
     assert not produced
 
 
-def test_requires_matching_is_case_insensitive():
+def test_requires_matching_is_case_sensitive():
+    """`isForeignKey=='Yes'` in R does not match a lowercase "yes"."""
     produced = _instantiate(
         [_field_row(fkClass="Ingredient", isForeignKey="yes")],
         _spec_for("fkClass"),
         load_check_descriptions("5.4"),
         "cdmFieldName",
     )
-    assert len(produced) == 1
+    assert not produced
+
+
+def test_yes_trigger_matching_is_case_sensitive():
+    """`isRequired=='Yes'` in R does not match a lowercase "yes"."""
+    descriptions = load_check_descriptions("5.4")
+    assert _instantiate(
+        [_field_row(isRequired="Yes")],
+        _spec_for("isRequired"),
+        descriptions,
+        "cdmFieldName",
+    )
+    assert not _instantiate(
+        [_field_row(isRequired="yes")],
+        _spec_for("isRequired"),
+        descriptions,
+        "cdmFieldName",
+    )
+
+
+def test_cdm_datatype_trigger_matching_is_case_sensitive():
+    """R's `dplyr::filter(cdmDatatype=='integer')` is case-sensitive.
+
+    The vendored CSVs really do carry `Integer`/`INTEGER` rows
+    alongside `integer` ones; DQD never runs cdmDatatype on them, so
+    neither do we.
+    """
+    descriptions = load_check_descriptions("5.4")
+    assert _instantiate(
+        [_field_row(cdmDatatype="integer")],
+        _spec_for("cdmDatatype"),
+        descriptions,
+        "cdmFieldName",
+    )
+    for casing in ("Integer", "INTEGER"):
+        assert not _instantiate(
+            [_field_row(cdmDatatype=casing)],
+            _spec_for("cdmDatatype"),
+            descriptions,
+            "cdmFieldName",
+        )

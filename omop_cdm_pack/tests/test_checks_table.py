@@ -244,6 +244,55 @@ def test_observation_period_overlap_one_day_gap_is_a_violation(
     assert result.num_denominator_rows == 1
 
 
+def test_observation_period_overlap_shared_single_boundary_day(
+    tmp_path,
+):
+    """Two one-day periods on the SAME day overlap, inclusively.
+
+    table_observation_period_overlap.sql's first clause is
+    ``cdmTable.start <= cdmTable2.end AND cdmTable.end >=
+    cdmTable2.start`` -- <=/>=, not </>. Both dates of both periods
+    coincide here, so the pair overlaps only by virtue of those two
+    equalities: every comparison in the clause is an equality, in
+    both directions of the self-join.
+
+    That makes this the one shape that pins the inclusivity of the
+    `<=` side. The neighbouring
+    test_observation_period_overlap_touching_boundary_is_a_violation
+    does not: overlap is a symmetric relation, so with p1 ending the
+    day p2 begins, the (p2, p1) direction of the self-join still
+    fires through the `>=` clause even if the `<=` were narrowed to
+    `<`, and the person is still counted. Here, narrowing `<=` to `<`
+    makes BOTH directions false and the count drops to 0.
+
+    The one-day gap clause cannot rescue it either: end + 1 day is
+    the day AFTER the other period's start, not equal to it.
+    """
+    periods = _dates(
+        pl.DataFrame(
+            {
+                "observation_period_id": [1, 2],
+                "person_id": [1, 1],
+                "observation_period_start_date": [
+                    "2010-06-01",
+                    "2010-06-01",
+                ],
+                "observation_period_end_date": [
+                    "2010-06-01",
+                    "2010-06-01",
+                ],
+            }
+        ),
+        "observation_period_start_date",
+        "observation_period_end_date",
+    )
+    path = _write(tmp_path, "observation_period", periods)
+    ctx = CdmContext.from_paths({"OBSERVATION_PERIOD": [path]})
+    result = _run(ctx, "measureObservationPeriodOverlap", "OBSERVATION_PERIOD")
+    assert result.num_violated_rows == 1
+    assert result.num_denominator_rows == 1
+
+
 def test_observation_period_overlap_two_day_gap_is_not_a_violation(
     tmp_path,
 ):

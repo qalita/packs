@@ -27,6 +27,12 @@ from typing import Optional
 
 import polars as pl
 
+from omop_dqd.checks._common import (
+    _row_count,
+    as_date,
+    guard,
+    require_columns,
+)
 from omop_dqd.registry import register
 from omop_dqd.results import CheckResult, counted, not_applicable
 
@@ -47,28 +53,6 @@ _INTEGER_DTYPES = frozenset(
     }
 )
 _FLOAT_DTYPES = frozenset({pl.Float32, pl.Float64})
-
-
-def guard(ctx, chk) -> Optional[CheckResult]:
-    """Return a NOT_APPLICABLE result when the check cannot run.
-
-    Used by every field-level check before touching data.
-    """
-    if not ctx.has_table(chk.cdm_table_name):
-        return not_applicable(
-            f"table {chk.cdm_table_name} is absent from the source"
-        )
-    if chk.cdm_field_name and not ctx.has_column(
-        chk.cdm_table_name, chk.cdm_field_name
-    ):
-        return not_applicable(
-            f"column {chk.qualified_field} is absent from the source"
-        )
-    return None
-
-
-def _row_count(frame: pl.LazyFrame) -> int:
-    return frame.select(pl.len()).collect(engine="streaming").item()
 
 
 def _count_where(
@@ -105,6 +89,24 @@ def cdm_datatype(ctx, chk) -> CheckResult:
     In parquet the declared type is enforced by the file, so an
     integer dtype can hold no violation; float and string columns
     can.
+
+    KNOWN DIVERGENCE. On a string column, upstream's test is SQL
+    Server's ``ISNUMERIC(@cdmFieldName) = 0 OR @cdmFieldName LIKE
+    '%.%'``; ours is a strict ``cast(pl.Int64)`` that fails. The two
+    disagree on values ISNUMERIC accepts but Int64 does not:
+
+      * a leading ``+`` (``"+12"``) -- ISNUMERIC says numeric, our
+        cast fails, so we count a violation where upstream does not;
+      * scientific notation (``"1e5"``) -- likewise;
+      * currency and thousands notation (``"$12"``, ``"1,234"``) --
+        ISNUMERIC accepts these as *money*, our cast fails, so again
+        we flag what upstream does not.
+
+    Every divergence is in the same direction: we are stricter, never
+    laxer. A value in any of these forms is not a plausible OMOP
+    integer id in the first place, so flagging it is the more useful
+    behaviour -- but it is a divergence from the SQL, not a
+    reproduction of it, and it is the only one in this module.
     """
     skip = guard(ctx, chk)
     if skip:
@@ -281,7 +283,7 @@ def person_birth_date(ctx) -> pl.LazyFrame:
         ),
     )
     if "birth_datetime" in columns:
-        birth = pl.col("birth_datetime").cast(pl.Date).fill_null(composed)
+        birth = as_date(ctx, "PERSON", "birth_datetime").fill_null(composed)
     else:
         birth = composed
     return person.select(pl.col("person_id"), birth.alias("birth_date"))
@@ -357,12 +359,17 @@ def plausible_after_birth(ctx, chk) -> CheckResult:
         return skip
     if not ctx.has_table("PERSON"):
         return not_applicable("PERSON is absent from the source")
+    missing = require_columns(
+        ctx, "PERSON", "person_id", "year_of_birth"
+    ) or require_columns(ctx, chk.cdm_table_name, "person_id")
+    if missing:
+        return missing
     return _join_violation_count(
         ctx,
         chk,
         person_birth_date(ctx),
         on="person_id",
-        predicate=pl.col(chk.cdm_field_name).cast(pl.Date)
+        predicate=as_date(ctx, chk.cdm_table_name, chk.cdm_field_name)
         < pl.col("birth_date"),
     )
 
@@ -385,7 +392,7 @@ def _death_dates(ctx) -> pl.LazyFrame:
         ctx.table("DEATH")
         .select(
             pl.col("person_id"),
-            pl.col("death_date").cast(pl.Date),
+            as_date(ctx, "DEATH", "death_date").alias("death_date"),
         )
         .drop_nulls(subset=["person_id"])
     )
@@ -408,6 +415,11 @@ def plausible_before_death(ctx, chk) -> CheckResult:
         return skip
     if not ctx.has_table("DEATH"):
         return not_applicable("DEATH is absent from the source")
+    missing = require_columns(
+        ctx, "DEATH", "person_id", "death_date"
+    ) or require_columns(ctx, chk.cdm_table_name, "person_id")
+    if missing:
+        return missing
     column = pl.col(chk.cdm_field_name)
     joined = ctx.table(chk.cdm_table_name).join(
         _death_dates(ctx), on="person_id", how="inner"
@@ -416,7 +428,9 @@ def plausible_before_death(ctx, chk) -> CheckResult:
     total = _row_count(denominator_frame)
     grace_end = pl.col("death_date").dt.offset_by("60d")
     violated = _row_count(
-        denominator_frame.filter(column.cast(pl.Date) > grace_end)
+        denominator_frame.filter(
+            as_date(ctx, chk.cdm_table_name, chk.cdm_field_name) > grace_end
+        )
     )
     return counted(violated, total)
 
@@ -441,16 +455,20 @@ def plausible_during_life(ctx, chk) -> CheckResult:
         return skip
     if not ctx.has_table("DEATH"):
         return not_applicable("DEATH is absent from the source")
+    missing = require_columns(
+        ctx, "DEATH", "person_id", "death_date"
+    ) or require_columns(ctx, chk.cdm_table_name, "person_id")
+    if missing:
+        return missing
     death = _death_dates(ctx)
     frame = ctx.table(chk.cdm_table_name)
     dead_person_ids = death.select("person_id").unique()
     denominator_frame = frame.join(dead_person_ids, on="person_id", how="semi")
     total = _row_count(denominator_frame)
-    column = pl.col(chk.cdm_field_name)
     grace_end = pl.col("death_date").dt.offset_by("60d")
     violated = _row_count(
         frame.join(death, on="person_id", how="inner").filter(
-            column.cast(pl.Date) > grace_end
+            as_date(ctx, chk.cdm_table_name, chk.cdm_field_name) > grace_end
         )
     )
     return counted(violated, total)
@@ -494,14 +512,17 @@ def plausible_temporal_after(ctx, chk) -> CheckResult:
 
     frame = ctx.table(chk.cdm_table_name)
     total = _row_count(frame)
-    cdm_field = pl.col(chk.cdm_field_name).cast(pl.Date)
+    cdm_field = as_date(ctx, chk.cdm_table_name, chk.cdm_field_name)
 
     if other_table == "PERSON":
         if not ctx.has_column(chk.cdm_table_name, "person_id"):
             return not_applicable(f"{chk.cdm_table_name} has no person_id")
+        missing = require_columns(ctx, "PERSON", "person_id", "year_of_birth")
+        if missing:
+            return missing
         person_columns = ctx.columns("PERSON")
         birth_field = (
-            pl.col(other_field).cast(pl.Date)
+            as_date(ctx, "PERSON", other_field)
             if other_field in person_columns
             else pl.lit(None, dtype=pl.Date)
         )
@@ -529,9 +550,12 @@ def plausible_temporal_after(ctx, chk) -> CheckResult:
             return not_applicable(
                 f"cannot restrict to {other_table} on person_id"
             )
+        missing = require_columns(ctx, chk.cdm_table_name, "person_id")
+        if missing:
+            return missing
         other_ids = ctx.table(other_table).select("person_id").unique()
         candidate = frame.join(other_ids, on="person_id", how="inner")
-    other_col = pl.col(other_field).cast(pl.Date)
+    other_col = as_date(ctx, chk.cdm_table_name, other_field)
     violated = _row_count(candidate.filter(other_col > cdm_field))
     return counted(violated, total)
 
@@ -557,16 +581,27 @@ def within_visit_dates(ctx, chk) -> CheckResult:
         return not_applicable(
             f"{chk.cdm_table_name} has no visit_occurrence_id"
         )
+    missing = require_columns(
+        ctx,
+        "VISIT_OCCURRENCE",
+        "visit_occurrence_id",
+        "visit_start_date",
+        "visit_end_date",
+    )
+    if missing:
+        return missing
     visits = ctx.table("VISIT_OCCURRENCE").select(
         pl.col("visit_occurrence_id"),
-        pl.col("visit_start_date").cast(pl.Date).alias("_visit_start"),
-        pl.col("visit_end_date").cast(pl.Date).alias("_visit_end"),
+        as_date(ctx, "VISIT_OCCURRENCE", "visit_start_date").alias(
+            "_visit_start"
+        ),
+        as_date(ctx, "VISIT_OCCURRENCE", "visit_end_date").alias("_visit_end"),
     )
     joined = ctx.table(chk.cdm_table_name).join(
         visits, on="visit_occurrence_id", how="inner"
     )
     total = _row_count(joined)
-    event = pl.col(chk.cdm_field_name).cast(pl.Date)
+    event = as_date(ctx, chk.cdm_table_name, chk.cdm_field_name)
     early_bound = pl.col("_visit_start").dt.offset_by("-7d")
     late_bound = pl.col("_visit_end").dt.offset_by("7d")
     violated = _row_count(
@@ -586,8 +621,15 @@ def within_visit_dates(ctx, chk) -> CheckResult:
 # _vocabulary_guard().
 
 
-def _vocabulary_guard(ctx, chk) -> Optional[CheckResult]:
-    """guard(), plus degrading to NOT_APPLICABLE without CONCEPT."""
+def _vocabulary_guard(ctx, chk, *concept_columns) -> Optional[CheckResult]:
+    """guard(), plus degrading to NOT_APPLICABLE without CONCEPT.
+
+    `concept_columns` are the CONCEPT attribute columns the calling
+    check selects, on top of the concept_id it always joins on. A
+    CONCEPT table present but missing one of them is as unrunnable as
+    no CONCEPT at all, and must degrade the same way rather than
+    raising into an ERROR.
+    """
     skip = guard(ctx, chk)
     if skip:
         return skip
@@ -595,7 +637,7 @@ def _vocabulary_guard(ctx, chk) -> Optional[CheckResult]:
         return not_applicable(
             "the OMOP vocabulary (CONCEPT) is absent from the source"
         )
-    return None
+    return require_columns(ctx, "CONCEPT", "concept_id", *concept_columns)
 
 
 def _concept_attribute(ctx, attribute: str) -> pl.LazyFrame:
@@ -653,7 +695,7 @@ def _domain_or_class_violation(
 
 @register("fkDomain")
 def fk_domain(ctx, chk) -> CheckResult:
-    skip = _vocabulary_guard(ctx, chk)
+    skip = _vocabulary_guard(ctx, chk, "domain_id")
     if skip:
         return skip
     expected = chk.params.get("value", "")
@@ -662,7 +704,7 @@ def fk_domain(ctx, chk) -> CheckResult:
 
 @register("fkClass")
 def fk_class(ctx, chk) -> CheckResult:
-    skip = _vocabulary_guard(ctx, chk)
+    skip = _vocabulary_guard(ctx, chk, "concept_class_id")
     if skip:
         return skip
     expected = chk.params.get("value", "")
@@ -685,7 +727,7 @@ def is_standard_valid_concept(ctx, chk) -> CheckResult:
     -- so an orphan concept id IS counted in the denominator, while
     being structurally unable to ever appear as violated.
     """
-    skip = _vocabulary_guard(ctx, chk)
+    skip = _vocabulary_guard(ctx, chk, "standard_concept", "invalid_reason")
     if skip:
         return skip
     field = chk.cdm_field_name
@@ -699,7 +741,13 @@ def is_standard_valid_concept(ctx, chk) -> CheckResult:
         pl.col("standard_concept").alias("_standard"),
         pl.col("invalid_reason").alias("_invalid"),
     )
-    joined = ctx.table(chk.cdm_table_name).join(
+    # The same filtered frame feeds the join. Polars joins do not
+    # match NULL keys (nulls_equal defaults to False), exactly as
+    # SQL's INNER JOIN does not, so pre-filtering the null field
+    # values away cannot change which rows the join produces -- it
+    # just saves a second full scan of what is, in a real CDM, one of
+    # the largest tables there is.
+    joined = denominator_frame.join(
         concept, left_on=field, right_on="concept_id", how="inner"
     )
     violated_pred = (column != 0) & (

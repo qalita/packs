@@ -3,8 +3,8 @@
 Wires the pipeline built in Tasks 1-11 (catalog -> loader -> runner ->
 reporting) to the QALITA platform's Pack contract: read job config,
 materialise the CDM tables from the configured source, run every
-applicable check, and push metrics/recommendations back to the
-platform.
+applicable check, and push metrics, recommendations and schemas back
+to the platform.
 """
 
 import logging
@@ -15,12 +15,45 @@ from qalita_core.pack import Pack
 import omop_dqd.checks  # noqa: F401  (registers every check)
 from omop_dqd.catalog import load_catalog
 from omop_dqd.loader import load_cdm_tables
-from omop_dqd.reporting import build_metrics, build_recommendations
+from omop_dqd.registry import registered_names
+from omop_dqd.reporting import (
+    build_metrics,
+    build_recommendations,
+    build_schemas,
+)
 from omop_dqd.results import CheckStatus
 from omop_dqd.runner import run_checks
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _validated_overrides(raw):
+    """job.threshold_overrides, or a clear error explaining why not.
+
+    Both failure modes are silent otherwise: a misspelled check name
+    matches nothing and the intended threshold simply never applies,
+    and a non-numeric value raises a bare ValueError from float() with
+    no indication of which key produced it.
+    """
+    overrides = {}
+    known = registered_names()
+    for check_name, value in dict(raw).items():
+        if check_name not in known:
+            raise ValueError(
+                f"threshold_overrides names unknown check "
+                f"{check_name!r}; known checks: "
+                f"{', '.join(sorted(known))}"
+            )
+        try:
+            overrides[check_name] = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"threshold_overrides[{check_name!r}] must be a number, "
+                f"got {value!r}"
+            ) from None
+    return overrides
+
 
 with Pack() as pack:
     job = pack.pack_config.get("job", {})
@@ -36,11 +69,11 @@ with Pack() as pack:
     )
 
     catalog = load_catalog(cdm_version)
-    overrides = job.get("threshold_overrides", {})
+    overrides = _validated_overrides(job.get("threshold_overrides", {}))
     if overrides:
         catalog = [
             (
-                replace(check, threshold=float(overrides[check.check_name]))
+                replace(check, threshold=overrides[check.check_name])
                 if check.check_name in overrides
                 else check
             )
@@ -64,6 +97,11 @@ with Pack() as pack:
 
     pack.metrics.data = build_metrics(results, dataset_label)
     pack.recommendations.data = build_recommendations(results, dataset_label)
+    # Without schemas the platform has no table/column tree for the
+    # table- and column-scoped metrics above to attach to -- see
+    # reporting.build_schemas.
+    pack.schemas.data = build_schemas(results, dataset_label)
 
     pack.metrics.save()
     pack.recommendations.save()
+    pack.schemas.save()

@@ -95,7 +95,7 @@ class CheckInstance:
     params: dict             # fkTableName, plausibleValueLow, standardConceptFieldName, …
 ```
 
-550 lignes de CSV → 2 757 instances (CDM 5.4) et 2 163 (CDM 5.3). Portage mécanique, entièrement testable sans données.
+550 lignes de CSV → 2 535 instances (CDM 5.4) et 2 005 (CDM 5.3). Portage mécanique, entièrement testable sans données.
 
 ## 4. Les 27 checks en Polars
 

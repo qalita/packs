@@ -4,7 +4,7 @@
 
 **Goal:** Build a QALITA pack that evaluates an OMOP CDM instance against the 27 data quality check types of the OHDSI DataQualityDashboard, executed entirely in Polars.
 
-**Architecture:** The OHDSI check metadata CSVs are vendored verbatim and drive check instantiation (~550 CSV rows → 2 757 check instances for CDM 5.4). The 30 OHDSI SQL Server templates are reimplemented as 27 Polars functions sharing one signature. A runner groups check instances by CDM table so each table is scanned once, then results are aggregated into QALITA metrics and recommendations.
+**Architecture:** The OHDSI check metadata CSVs are vendored verbatim and drive check instantiation (~550 CSV rows → 2 535 check instances for CDM 5.4). The 30 OHDSI SQL Server templates are reimplemented as 27 Polars functions sharing one signature. A runner groups check instances by CDM table so each table is scanned once, then results are aggregated into QALITA metrics and recommendations.
 
 **Tech Stack:** Python 3.10/3.11, Polars (lazy + streaming), pyarrow, `qalita_core`, pytest.
 
@@ -299,7 +299,7 @@ Create `omop_cdm_pack/README.md`:
 
 Evaluates an OMOP Common Data Model instance against the check suite of the
 [OHDSI DataQualityDashboard](https://github.com/OHDSI/DataQualityDashboard):
-27 check types instantiated over the CDM specification into 2 757 checks for CDM 5.4 (2 163 for 5.3),
+27 check types instantiated over the CDM specification into 2 535 checks for CDM 5.4 (2 005 for 5.3),
 grouped by the three Kahn framework categories (conformance, completeness, plausibility).
 
 Everything runs in Polars, lazily and in streaming mode. No R, no JVM, no SQL pushdown.

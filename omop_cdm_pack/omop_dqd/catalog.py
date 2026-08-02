@@ -21,6 +21,16 @@ TRIGGER_ALWAYS = "always"
 TRIGGER_YES = "yes"
 TRIGGER_VALUE = "value"
 
+# Every gate below is compared CASE-SENSITIVELY, because upstream's is:
+# R/RunCheck.R builds `<level>Checks %>% dplyr::filter(<evaluationFilter>)`
+# from Check_Descriptions.csv, and the filters are R string equality
+# (`isRequired=='Yes'`, `cdmDatatype=='integer'`), which is
+# case-sensitive. The vendored CSVs really do contain mixed casings --
+# 5.4 has cdmDatatype `integer` x210 and `Integer` x4, 5.3 has
+# `integer` x148, `Integer` x13 and `INTEGER` x3 -- so folding case
+# here would instantiate checks DQD never runs.
+_YES = "Yes"
+
 
 @dataclass(frozen=True)
 class CheckSpec:
@@ -29,7 +39,8 @@ class CheckSpec:
     trigger_column  column that gates instantiation; defaults to `name`
     value_column    column supplying params["value"]; defaults to `name`
     trigger_equals  for TRIGGER_VALUE, the cell must equal this
-                    (case-insensitive) rather than merely be non-empty
+                    exactly (case-sensitively, see _YES above) rather
+                    than merely be non-empty
     requires        prerequisite (column, value) pairs, all of which
                     must hold for the check to instantiate
 
@@ -244,7 +255,7 @@ def _requirements_met(
 ) -> bool:
     for column, expected in requires:
         actual = (row.get(column) or "").strip()
-        if actual.lower() != expected.lower():
+        if actual != expected:
             return False
     return True
 
@@ -268,14 +279,14 @@ def _instantiate(
                 continue
             gate_column = spec.trigger_column or spec.name
             gate_cell = (row.get(gate_column) or "").strip()
-            if spec.trigger == TRIGGER_YES and gate_cell.lower() != "yes":
+            if spec.trigger == TRIGGER_YES and gate_cell != _YES:
                 continue
             if spec.trigger == TRIGGER_VALUE:
                 if not gate_cell:
                     continue
                 if (
                     spec.trigger_equals is not None
-                    and gate_cell.lower() != spec.trigger_equals.lower()
+                    and gate_cell != spec.trigger_equals
                 ):
                     continue
             description = descriptions.get(spec.name)

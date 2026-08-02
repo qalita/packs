@@ -4,7 +4,7 @@ import omop_dqd.checks  # noqa: F401
 from omop_dqd.catalog import CheckInstance, load_catalog
 from omop_dqd.context import CdmContext
 from omop_dqd.evaluate import EvaluatedCheck, evaluate
-from omop_dqd.registry import get_check, register
+from omop_dqd.registry import get_check, register, registered_names
 from omop_dqd.results import CheckStatus, counted
 from omop_dqd.runner import _NotApplicableContext, _reclassify, run_checks
 
@@ -119,12 +119,35 @@ def test_full_catalog_run_produces_no_errors(mini_cdm):
     ]
 
 
-def test_catalog_5_4_has_2539_instances():
-    assert len(load_catalog("5.4")) == 2539
+def test_every_catalog_check_name_has_a_registered_implementation():
+    """The registry and the catalog must name exactly the same checks.
+
+    A dropped or misspelled @register decorator does not fail at
+    import: run_checks() turns an unregistered name into a per-
+    instance ERROR (see _run_one), so an entire check type can go
+    dark while the run still "succeeds". Equally, a @register for a
+    name no catalog row ever produces is dead code. Comparing the two
+    sets catches both in one assertion.
+    """
+    catalog_names = {c.check_name for c in load_catalog("5.4")}
+    # The registry is a process-global dict, and this very module
+    # registers a check of its own to exercise the runner (see
+    # `bareCheckForTest` below), so compare only what the production
+    # check modules put there.
+    implemented = {
+        name
+        for name in registered_names()
+        if get_check(name).__module__.startswith("omop_dqd.checks")
+    }
+    assert implemented == catalog_names
 
 
-def test_catalog_5_3_has_2021_instances():
-    assert len(load_catalog("5.3")) == 2021
+def test_catalog_5_4_has_2535_instances():
+    assert len(load_catalog("5.4")) == 2535
+
+
+def test_catalog_5_3_has_2005_instances():
+    assert len(load_catalog("5.3")) == 2005
 
 
 # =====================================================================
