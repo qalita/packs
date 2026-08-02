@@ -14,6 +14,11 @@ source_conf.json
 *.log
 *requirements.txt
 *.csv
+# ...except the OHDSI DataQualityDashboard check metadata vendored into
+# omop_cdm_pack, which IS source: the whole check catalog is generated
+# from these 8 files. Without this negation `git add` silently drops
+# them and the refresh procedure in omop_dqd/vendor/README.md no-ops.
+!omop_cdm_pack/omop_dqd/vendor/csv/*.csv
 
 # Run scripts are copied from scripts/ by CI/CD - ignore in pack directories
 *_pack/run.sh
