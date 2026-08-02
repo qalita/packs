@@ -69,17 +69,24 @@ def duplicate_counts(
     uniqueness_columns: Sequence[str],
     *,
     exact: bool = True,
+    max_groups: int = analytics.DEFAULT_MAX_GROUPS,
 ) -> Tuple[int, int, str]:
-    """Total rows and duplicate rows, without materializing the group table.
+    """Total rows and duplicate rows.
 
-    ``exact`` (the default here) groups by the uniqueness columns and sums
-    ``size - 1`` inside the engine. The streaming engine spills group state to
-    disk, so this holds on a source far larger than RAM.
+    Grouping by the uniqueness columns and summing ``size - 1`` gives the exact
+    answer, but the group table holds one entry per distinct key and Polars'
+    streaming engine does NOT spill it: measured on 160M rows keyed on every
+    column, that group_by was killed by the OOM killer at 29.5 GB. What the
+    aggregation costs is set by cardinality, not by row count.
 
-    ``exact=False`` derives the duplicate count from a HyperLogLog distinct
-    count. It is O(1) memory but it is a subtraction of two large numbers: at a
-    low duplication rate the HLL error dwarfs the answer, so it is offered as an
-    opt-in rather than the default that the rest of the suite uses.
+    So the number of groups is estimated first — HyperLogLog, constant memory,
+    one pass — and the exact path runs only when it fits. Above ``max_groups``
+    the duplicate count falls back to ``total - approx_distinct``, which is O(1)
+    memory but is a subtraction of two large numbers: near-unique data makes the
+    HLL error dwarf the answer, so the estimate is reported as approximate and
+    never as a fact.
+
+    ``exact=False`` forces the approximate path without paying for the estimate.
 
     Returns:
         ``(total_rows, duplicates, method)``.
@@ -90,7 +97,7 @@ def duplicate_counts(
 
     total_rows = analytics.row_count(lf)
 
-    if exact:
+    if exact and analytics.estimate_groups(lf, columns) <= max_groups:
         grouped = (
             lf.select(columns).group_by(columns).agg(pl.len().alias(_COUNT))
         )
@@ -113,6 +120,7 @@ def duplicate_rows(
     uniqueness_columns: Sequence[str],
     *,
     limit: int,
+    max_groups: int = analytics.DEFAULT_MAX_GROUPS,
 ) -> Tuple[int, "pl.DataFrame"]:
     """Rows that belong to a duplicated key group, exact count and bounded rows.
 
@@ -122,6 +130,13 @@ def duplicate_rows(
     """
     columns = list(lf.collect_schema().keys())
     keys = list(uniqueness_columns)
+
+    # Same ceiling as duplicate_counts: the join below needs the whole group
+    # table in memory. With a near-unique key there is nothing to show anyway —
+    # almost no group has more than one row — so returning no examples is both
+    # what fits and what is true.
+    if analytics.estimate_groups(lf, keys) > max_groups:
+        return 0, analytics.failures(lf, pl.lit(False), limit=0)[1]
 
     counts = lf.group_by(keys).agg(pl.len().alias(_COUNT))
     # nulls_equal mirrors group_by, which puts null keys in a group of their

@@ -144,9 +144,6 @@ def test_column_metric_keys(approximate):
         "iqr",
         "n_infinite",
         "p_infinite",
-        "monotonic",
-        "monotonic_increase",
-        "monotonic_decrease",
         "5%",
         "25%",
         "50%",
@@ -200,13 +197,14 @@ def test_exact_column_values(approximate):
     assert metrics[("label", "max_length")] == "3"
     assert metrics[("label", "n_characters")] == "10"
 
-    # id is 1..10 across both parts: unique, complete and increasing.
+    # id is 1..10 across both parts: unique and complete. Monotonicity is no
+    # longer reported — diff() cannot stream, and row order across part files
+    # describes how the loader staged the data rather than the source.
     assert metrics[("id", "n_distinct")] == "10"
     assert metrics[("id", "is_unique")] == "1"
     assert metrics[("id", "completeness_score")] == "1"
-    assert metrics[("id", "monotonic_increase")] == "1"
-    assert metrics[("id", "monotonic_decrease")] == "0"
-    assert metrics[("id", "ordering")] == "1"
+    assert ("id", "monotonic_increase") not in metrics
+    assert ("id", "ordering") not in metrics
 
 
 def test_approximate_statistics_declare_their_method(approximate, exact):

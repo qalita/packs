@@ -13,7 +13,7 @@ streaming passes:
 
 - one pass for every scalar statistic of every column (``profile``);
 - one pass for the statistics ``profile`` does not cover (skewness, kurtosis,
-  monotonicity, infinities, byte sizes);
+  infinities, byte sizes);
 - two passes for approximate quantiles, plus two more for string lengths;
 - one bounded pass per column for top values.
 
@@ -137,19 +137,15 @@ def extra_stats(lf, schema, *, exact=False):
     numeric = analytics.numeric_columns(schema)
     strings = analytics.string_columns(schema)
 
+    # NOT computed here: monotonicity. It needs diff(), a window operation that
+    # materializes the whole column — measured at 12.6 GiB across four numeric
+    # columns of a 160M-row source. And the answer would not be worth it: row
+    # order across part files reflects how the loader staged the data, not a
+    # property of the source, so "is this column sorted" would describe the
+    # ingestion. The monotonic_* metrics are therefore no longer emitted.
     exprs = {}
     for name in numeric:
         col = pl.col(name)
-        # bias=False matches pandas' .skew()/.kurt(), which is what the
-        # previous ydata-profiling based output reported.
-        exprs[f"skew|{name}"] = col.skew(bias=False)
-        exprs[f"kurt|{name}"] = col.kurtosis(bias=False)
-        # diff() keeps its ordering across part files, so monotonicity still
-        # describes the dataset as loaded rather than one partition.
-        exprs[f"inc|{name}"] = (col.diff() >= 0).all()
-        exprs[f"dec|{name}"] = (col.diff() <= 0).all()
-        exprs[f"incs|{name}"] = (col.diff() > 0).all()
-        exprs[f"decs|{name}"] = (col.diff() < 0).all()
         if schema[name].is_float():
             exprs[f"inf|{name}"] = col.is_infinite().sum()
             exprs[f"nan|{name}"] = col.is_nan().sum()
@@ -160,6 +156,13 @@ def extra_stats(lf, schema, *, exact=False):
         exprs[f"bytes|{name}"] = col.str.len_bytes().sum()
 
     stats = analytics.agg(lf, exprs) if exprs else {}
+
+    # Polars' Expr.skew/Expr.kurtosis materialize the column rather than
+    # streaming it — 6.6 GiB on four numeric columns of a 160M-row source. The
+    # moment-based helper gets the same numbers in two streaming passes.
+    for name, shape in analytics.skew_kurtosis(lf, numeric).items():
+        stats[f"skew|{name}"] = shape["skew"]
+        stats[f"kurt|{name}"] = shape["kurtosis"]
 
     # Median string length needs an ordering statistic, so it cannot ride the
     # scalar pass. The projection means only the string columns are read.
@@ -189,10 +192,6 @@ def profile_dataset(lf, schema, options):
         for prefix, key in (
             ("skew", "skewness"),
             ("kurt", "kurtosis"),
-            ("inc", "monotonic_increase"),
-            ("dec", "monotonic_decrease"),
-            ("incs", "monotonic_increase_strict"),
-            ("decs", "monotonic_decrease_strict"),
             ("inf", "n_infinite"),
             ("nan", "n_nan"),
             ("chars", "n_characters"),
