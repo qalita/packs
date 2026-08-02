@@ -108,6 +108,28 @@ with Pack() as pack:
     total_checks = 0
     total_valid_percent = 0
 
+    # Résultats par contrôle, accumulés pour les figures.
+    check_outcomes = []
+
+    pack.figures.declare_measure(
+        "score",
+        unit="score",
+        direction="higher_is_better",
+        target=0.95,
+        warn=0.8,
+        label="Score de validité",
+    )
+    pack.figures.declare_measure(
+        "n_checks", unit="count", direction="neutral", label="Contrôles"
+    )
+    pack.figures.declare_measure(
+        "n_violations",
+        unit="count",
+        direction="lower_is_better",
+        target=0,
+        label="Valeurs hors bornes",
+    )
+
     for dataset_label, df_curr in items:
         print(f"Validating numeric ranges for {dataset_label}")
 
@@ -154,6 +176,15 @@ with Pack() as pack:
 
             # Validate range
             result = validate_range(col_data, min_value, max_value)
+
+            check_outcomes.append(
+                {
+                    "column": column,
+                    "n_violations": int(
+                        result["below_min"] + result["above_max"]
+                    ),
+                }
+            )
 
             # Add metrics ( naming convention)
             if result["below_min"] > 0:
@@ -333,6 +364,43 @@ with Pack() as pack:
                         }
                     )
 
+    #########################################################
+    ## Figures
+    dataset_scope = {
+        "perimeter": "dataset",
+        "value": pack.source_config["name"],
+    }
+
+    if check_outcomes:
+        # Verdicts : une composition dont les modalités sont pass/fail. Le moteur
+        # leur donne les couleurs de statut, toujours avec icône et libellé.
+        outcome = {"pass": 0, "fail": 0}
+        for entry in check_outcomes:
+            outcome["fail" if entry["n_violations"] > 0 else "pass"] += 1
+        pack.figures.add(
+            "checks_outcome",
+            intent="composition",
+            frame=[{"status": k, "n_checks": v} for k, v in outcome.items()],
+            dims=["status"],
+            measures=["n_checks"],
+            scope=dataset_scope,
+            title="Résultat des contrôles",
+        )
+
+        # Ventilation des valeurs hors bornes : ce qui explique un score dégradé.
+        violations = [e for e in check_outcomes if e["n_violations"] > 0]
+        if violations:
+            pack.figures.add(
+                "violations_by_column",
+                intent="breakdown",
+                of="score",
+                frame=violations,
+                dims=["column"],
+                measures=["n_violations"],
+                scope=dataset_scope,
+                title="Valeurs hors bornes par colonne",
+            )
+
     # Compute overall score
     if total_checks > 0:
         score = total_valid_percent / total_checks
@@ -352,3 +420,4 @@ with Pack() as pack:
 
     pack.metrics.save()
     pack.recommendations.save()
+    pack.figures.save()
