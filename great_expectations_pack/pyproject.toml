@@ -1,6 +1,6 @@
 [project]
 name = "great-expectations-pack"
-version = "0.1.0"
+version = "0.2.0"
 description = "Run Great Expectations suites on datasets"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
@@ -9,8 +9,16 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
-    "qalita-core>=1.5.0",
-    "great-expectations>=0.16.0",
+    "qalita-core>=2.0.0",
+    # main.py is written against the GX 1.x fluent API. The pack used to ask
+    # for >=0.16.0 while importing great_expectations.dataset, the V2 API
+    # removed in 1.0 — so it resolved to 1.x and raised ImportError on start.
+    "great-expectations>=1.0,<2",
+    # Transitively available through qalita-core, declared here because this
+    # pack executes its checks in DuckDB rather than merely reading parquet.
+    "duckdb>=0.10.0",
+    # SQLAlchemy dialect GX needs to talk to DuckDB at all.
+    "duckdb-engine>=0.13.0",
     "pyarrow>=23.0.1",
 ]
 

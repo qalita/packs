@@ -1,6 +1,8 @@
 {
   "job": {
     "suite_name": "qalita_default_suite",
+    "sample_rows": 100000,
+    "failed_rows_limit": 10,
     "expectations": [
       {"expectation_type": "expect_table_row_count_to_be_between", "kwargs": {"min_value": 1}},
       {"expectation_type": "expect_table_columns_to_match_set", "kwargs": {"column_set": ["id", "value"], "exact_match": false}}
@@ -9,6 +11,8 @@
   "charts": {
     "overview": [
       {"metric_key": "score", "chart_type": "text", "display_title": true, "justify": true},
+      {"metric_key": "expectations_passed", "chart_type": "text", "display_title": true, "justify": true},
+      {"metric_key": "expectations_failed", "chart_type": "text", "display_title": true, "justify": true},
       {"metric_key": "score", "chart_type": "bar_chart", "display_title": true, "justify": false}
     ],
     "scoped": [

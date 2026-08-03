@@ -1,7 +1,7 @@
 [project]
 name = "timeliness-pack"
-version = "1.0.0"
-description = "Scan schema for files"
+version = "2.0.0"
+description = "Check dataset freshness from date columns"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
 ]
@@ -9,8 +9,8 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
 dependencies = [
-    "matplotlib>=3.8.0",
-    "qalita-core>=1.5.0",
+    "qalita-core>=2.0.0",
+    "polars>=1.37.0",
     "pyarrow>=23.0.1",
 ]
 

@@ -4,6 +4,9 @@
             "skiprows": 0
         }
     },
+    "exact": false,
+    "top_k": 10,
+    "high_cardinality_threshold": 50,
     "charts": {
         "overview": [
             {

@@ -2216,7 +2216,7 @@ wheels = [
 
 [[package]]
 name = "qalita-core"
-version = "1.5.1"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-storage-blob" },
@@ -2232,7 +2232,6 @@ dependencies = [
     { name = "ibm-db-sa" },
     { name = "openpyxl" },
     { name = "oracledb" },
-    { name = "pandas" },
     { name = "paramiko" },
     { name = "polars" },
     { name = "psycopg2-binary" },
@@ -2249,9 +2248,9 @@ dependencies = [
     { name = "teradatasqlalchemy" },
     { name = "trino" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/d2/02a8a11a7f6d7ca16ffe787e1d6a64d8033091e6069c6f639a24ab58f64b/qalita_core-1.5.1.tar.gz", hash = "sha256:c32708bff20ec358cf94931c40681d1c7b129eb3617d65ea7959e714d9dc2b82", size = 1461494, upload-time = "2026-02-03T16:11:32.02Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/d6/bb2d7246d53c2fd7689168c19936e1470f5e5a897489cbd3cad017ad6478/qalita_core-2.0.0.tar.gz", hash = "sha256:644ef46eae299991c28ef72eea55e004a9d1328e461068af3df74621465cfaf2", size = 1556417, upload-time = "2026-08-03T13:45:16.067Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/06/0e9e97841cb662e1dc9700d26ea7be5df73d9a1660f40bfe46d333e33c7a/qalita_core-1.5.1-py3-none-any.whl", hash = "sha256:d1d725ff67e34e6a812f030db4078d30964e7554eec39bee9b05371fd323e4bd", size = 37679, upload-time = "2026-02-03T16:11:29.84Z" },
+    { url = "https://files.pythonhosted.org/packages/91/3f/88452b5968bd4d0f3bedb493680f8a7aace0ded63cff1cd5d1d6bf0ccb45/qalita_core-2.0.0-py3-none-any.whl", hash = "sha256:b928db4808024a9cad07e2a8a99d032dc6cdf637677f5539397614b999e953df", size = 79233, upload-time = "2026-08-03T13:45:14.408Z" },
 ]
 
 [[package]]
@@ -2557,17 +2556,19 @@ wheels = [
 
 [[package]]
 name = "text-validation-pack"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "polars" },
     { name = "pyarrow" },
     { name = "qalita-core" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "polars", specifier = ">=1.37.0" },
     { name = "pyarrow", specifier = ">=24.0.0" },
-    { name = "qalita-core", specifier = ">=1.5.0" },
+    { name = "qalita-core", specifier = ">=2.0.0" },
 ]
 
 [[package]]

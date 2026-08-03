@@ -1,56 +1,59 @@
 {
-    "job": {
-        "id_columns": [],
-        "source": {
-            "skiprows": 0
-        }
+  "job": {
+    "id_columns": [],
+    "source": {
+      "skiprows": 0
     },
-    "charts": {
-        "overview": [
-            {
-                "metric_key": "score",
-                "chart_type": "text",
-                "display_title": true,
-                "justify": true
-            },
-            {
-                "metric_key": "float_score",
-                "chart_type": "text",
-                "display_title": true,
-                "justify": true
-            },
-            {
-                "metric_key": "score",
-                "chart_type": "bar_chart",
-                "display_title": true,
-                "justify": false
-            }
-        ],
-        "scoped": [
-            {
-                "metric_key": "decimal_precision",
-                "chart_type": "text",
-                "display_title": true,
-                "justify": true
-            },
-            {
-                "metric_key": "proportion_score",
-                "chart_type": "text",
-                "display_title": true,
-                "justify": true
-            },
-            {
-                "metric_key": "proportion_score",
-                "chart_type": "spark_area_chart",
-                "display_title": false,
-                "justify": false
-            },
-            {
-                "metric_key": "decimal_precision",
-                "chart_type": "spark_area_chart",
-                "display_title": false,
-                "justify": false
-            }
-        ]
-    }
+    "examples": true,
+    "example_rows": 10,
+    "example_max_checks": 20
+  },
+  "charts": {
+    "overview": [
+      {
+        "metric_key": "score",
+        "chart_type": "text",
+        "display_title": true,
+        "justify": true
+      },
+      {
+        "metric_key": "float_score",
+        "chart_type": "text",
+        "display_title": true,
+        "justify": true
+      },
+      {
+        "metric_key": "score",
+        "chart_type": "bar_chart",
+        "display_title": true,
+        "justify": false
+      }
+    ],
+    "scoped": [
+      {
+        "metric_key": "decimal_precision",
+        "chart_type": "text",
+        "display_title": true,
+        "justify": true
+      },
+      {
+        "metric_key": "proportion_score",
+        "chart_type": "text",
+        "display_title": true,
+        "justify": true
+      },
+      {
+        "metric_key": "proportion_score",
+        "chart_type": "spark_area_chart",
+        "display_title": false,
+        "justify": false
+      },
+      {
+        "metric_key": "decimal_precision",
+        "chart_type": "spark_area_chart",
+        "display_title": false,
+        "justify": false
+      }
+    ]
+  }
 }

@@ -18,5 +18,5 @@ tags:
 - Reconciliation
 type: consistency
 url: https://github.com/qalita/packs/tree/main/data_compare_pack
-version: 2.0.54
+version: 2.1.0
 visibility: public

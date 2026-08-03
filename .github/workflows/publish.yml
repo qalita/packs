@@ -3,6 +3,14 @@ on:
   push:
     branches:
       - main
+  # Also run on PRs. The publish job below only fires on push to main, i.e.
+  # AFTER the merge — far too late to stop a pack that pins a qalita-core
+  # release nobody has published yet. The resolve job runs on the PR so the
+  # merge itself can be blocked; add "resolve" to the branch protection
+  # required checks for that to actually bite.
+  pull_request:
+    branches:
+      - main
 
 # Minimal permissions following least privilege principle
 permissions:
@@ -10,7 +18,78 @@ permissions:
   actions: read
 
 jobs:
+  # Gate: every publishable pack's dependency set must be resolvable from PyPI
+  # before anything is pushed to the platform. Packs pin `qalita-core>=X`, and
+  # core is released by a manual tag, so merging packs before core is on PyPI
+  # publishes packs whose `uv lock` (run by scripts/run.sh on every worker job)
+  # fails with "No solution found" — every analysis job on every source dies
+  # until someone tags core. Resolution is checked for ALL packs here, in a
+  # separate job, so a failure can never leave a half-published set behind.
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Resolve every pack's dependencies
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          failed=()
+          checked=0
+          for dir in */ ; do
+            [ -f "${dir}pack_conf.json" ] || continue
+            pack_name="${dir%/}"
+            if [ ! -f "${dir}pyproject.toml" ]; then
+              echo "::error title=Missing pyproject::${pack_name} has a pack_conf.json but no pyproject.toml"
+              failed+=("$pack_name")
+              continue
+            fi
+            checked=$((checked + 1))
+            echo "::group::Resolving ${pack_name}"
+            cp -r "$dir" "$work/$pack_name"
+            # Resolve from pyproject.toml alone, on a scratch copy:
+            #  - the committed uv.lock can be stale (locks have pinned an older
+            #    qalita-core than the declared floor before), and a stale-but-
+            #    green lock must not hide a floor that is not on PyPI yet;
+            #  - this is what scripts/run.sh does on the worker, so it validates
+            #    the pack's whole real dependency set, not just qalita-core;
+            #  - no --python pin, so uv resolves across the pack's own
+            #    requires-python range including any marker splits.
+            # --no-cache so a warm index cache cannot report a version that
+            # PyPI does not actually serve.
+            rm -f "$work/$pack_name/uv.lock"
+            if ! ( cd "$work/$pack_name" && uv lock --no-cache ); then
+              echo "::error title=Unresolvable pack::${pack_name} dependencies cannot be resolved. If it pins an unreleased qalita-core, tag and publish core first."
+              failed+=("$pack_name")
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$checked" -eq 0 ]; then
+            echo "::error title=No packs found::No directory with a pack_conf.json was found"
+            exit 1
+          fi
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error title=Publish blocked::Unresolvable packs: ${failed[*]}"
+            exit 1
+          fi
+          echo "All ${checked} packs resolve."
+
   publish:
+    # Never publish from a pull request, and never publish a set of packs that
+    # the gate above could not resolve.
+    if: github.event_name == 'push'
+    needs: resolve
     runs-on: ubuntu-latest
     environment: cloud-platform
     defaults:

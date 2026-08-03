@@ -1,23 +1,21 @@
 [project]
 name = "schema-scanner-pack"
-version = "1.0.0"
+version = "2.0.0"
 description = "Scan schema for files"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
 ]
 license = {text = "Proprietary"}
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+# The profiling stack removed in 3.0.0 is what pinned this pack
+# below Python 3.13.
+requires-python = ">=3.10,<4.0"
 dependencies = [
-    "ydata-profiling>=4.6.0",
-    "matplotlib>=3.8.0",
-    "lxml>=6.1.0",
     "openpyxl>=3.1.2",
     "sqlalchemy>=2.0.23",
-    "html5lib>=1.1",
-    "beautifulsoup4>=4.12.3",
     "psycopg2-binary>=2.9.9",
-    "qalita-core>=1.5.0",
+    "qalita-core>=2.0.0",
+    "polars>=1.37.0",
     "pyarrow>=23.0.1",
 ]
 

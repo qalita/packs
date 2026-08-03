@@ -34,11 +34,17 @@ repos:
     hooks:
       - id: black
         args: ["--line-length", "79"]
-  - repo: https://github.com/PyCQA/pylint
-    rev: v3.2.7
+  - repo: local
     hooks:
-      - id: pylint
-        args: ["--fail-under=8", "--disable=E0401,C0301,C0114,C0411,R0801"]
+      # Per-pack rather than the upstream pylint hook: every pack entrypoint is
+      # named main.py, so one pylint process over several packs resolves `main`
+      # to whichever it parsed first and reports every other pack's main.xxx as
+      # a no-member error. See scripts/lint_packs.sh.
+      - id: pylint-packs
+        name: pylint (per pack)
+        entry: scripts/lint_packs.sh
+        language: system
+        types: [python]
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.9
     hooks:
