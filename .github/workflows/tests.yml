@@ -1,0 +1,95 @@
+name: "Tests"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+# Minimal permissions following least privilege principle
+permissions:
+  contents: read
+
+# A push that supersedes an in-flight run makes that run's answer worthless;
+# 17 packs x a full dependency install is the last thing to leave running for
+# a commit nobody will merge.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Testing all 17 packs on every commit means 17 dependency installs, most of
+  # them for packs the change cannot reach. This job narrows the matrix to the
+  # packs actually touched; anything shared (scripts/, .github/, root config)
+  # still fans out to everything.
+  select:
+    name: Select packs to test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      packs: ${{ steps.pick.outputs.packs }}
+      any: ${{ steps.pick.outputs.any }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0  # the diff needs the base commit, not just HEAD
+
+      - name: Pick the packs this change can affect
+        id: pick
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            packs=$(git diff --name-only "$BASE" HEAD | scripts/select_test_matrix.sh)
+          else
+            # New branch, force-push, or a first commit: `before` is the null
+            # SHA and there is nothing to diff against. Test everything rather
+            # than silently test nothing.
+            echo "no usable base ref ('$BASE'), selecting every pack"
+            packs=$(scripts/select_test_matrix.sh --all)
+          fi
+          echo "packs=$packs" >> "$GITHUB_OUTPUT"
+          if [ "$packs" = "[]" ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Selected: $packs" >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    name: Pytest - ${{ matrix.pack }}
+    needs: select
+    if: needs.select.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One broken pack must not hide the state of the other sixteen.
+      fail-fast: false
+      matrix:
+        pack: ${{ fromJSON(needs.select.outputs.packs) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "${{ matrix.pack }}/uv.lock"
+
+      - name: Install the pack's locked dependencies
+        working-directory: ${{ matrix.pack }}
+        # --frozen: test what the worker will actually install, and fail if the
+        # lockfile drifted from pyproject.toml instead of quietly re-resolving.
+        # --no-install-project: a pack is a main.py the worker runs, not an
+        # installable distribution — hatchling has no package to build here.
+        run: |
+          set -euo pipefail
+          uv sync --frozen --no-install-project
+          uv pip install pytest
+
+      - name: Run tests
+        working-directory: ${{ matrix.pack }}
+        run: .venv/bin/python -m pytest tests -q
