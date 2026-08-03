@@ -9,12 +9,21 @@ See the NOTICE file at the pack root.
 from typing import Optional
 
 import polars as pl
+from qalita_core import analytics
 
 from omop_dqd.results import CheckResult, not_applicable
 
 
 def _row_count(frame: pl.LazyFrame) -> int:
-    return frame.select(pl.len()).collect(engine="streaming").item()
+    """Rows in ``frame``, counted without materialising it.
+
+    Routed through qalita_core.analytics so every count in every pack goes
+    through the one funnel that enforces the streaming engine and refuses to
+    fall back to the in-memory one. Counting is the only thing this pack
+    materialises: a check computes a numerator and a denominator and reports
+    the ratio, never the rows.
+    """
+    return analytics.row_count(frame)
 
 
 def guard(ctx, chk) -> Optional[CheckResult]:

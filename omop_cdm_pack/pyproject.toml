@@ -9,13 +9,18 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
-    "qalita-core>=1.5.0",
+    "qalita-core>=2.0.0",
     "pyarrow>=23.0.1",
+    # Lower bound is 1.30, not 1.0: below 1.25 `collect(engine="streaming")`
+    # is swallowed by polars' **kwargs and silently runs the in-memory
+    # engine. Every row count in this pack goes through that call, so on an
+    # older polars the pack would load whole CDM tables into RAM while
+    # looking exactly like it was streaming.
     # Upper-bounded: Polars 2.0 removes String->Date casting and the
     # deprecated dtype-set constants this pack works around, and
     # changes streaming-engine behaviour. Widen only with a run of
     # the suite against the new major.
-    "polars>=1.0,<2",
+    "polars>=1.30,<2",
 ]
 
 [build-system]

@@ -37,6 +37,20 @@ The pack also emits `schemas`: one entry per present CDM table and one per check
 (`TABLE.field`). The platform builds a source's table/column tree from these alone, so the
 metrics above would have nothing to attach to without them.
 
+### Memory
+
+Every check computes a numerator and a denominator and reports the ratio; no check
+materialises rows. Counting goes through `qalita_core.analytics.row_count`, so it runs on
+the streaming engine and raises rather than silently falling back to the in-memory one.
+
+What is **not** bounded by that: many checks take an exact `.unique()` over `person_id`, or
+anti-join two tables on it. Polars 1.37 has no out-of-core execution, so those cost memory
+proportional to the number of distinct persons — not to the number of rows, but not
+constant either. The pack has not been measured against a CDM large enough to find where
+that ceiling is. Replacing the exact distinct counts with `analytics.approx_n_unique` would
+bound them, at the cost of no longer matching the upstream OHDSI numbers, which is the one
+property this port exists to preserve. Measure before assuming either way.
+
 ### Attribution
 
 Check metadata and check logic derive from the OHDSI DataQualityDashboard, licensed
