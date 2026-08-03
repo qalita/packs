@@ -93,3 +93,30 @@ jobs:
       - name: Run tests
         working-directory: ${{ matrix.pack }}
         run: .venv/bin/python -m pytest tests -q
+
+  # The matrix is dynamic, so "Pytest - profiling_pack" cannot be a required
+  # check: on a PR that does not touch profiling_pack it never reports and the
+  # PR waits forever. This job has a fixed name, always runs, and fails if any
+  # matrix job did — it is the one to put in branch protection.
+  gate:
+    name: Tests
+    needs: [select, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any pack test suite failed
+        run: |
+          set -euo pipefail
+          echo "selected: ${{ needs.select.outputs.packs }}"
+          echo "select: ${{ needs.select.result }} / test: ${{ needs.test.result }}"
+          # 'skipped' is the honest answer when a change touched no testable
+          # pack; only failure and cancellation are refusals.
+          if [ "${{ needs.select.result }}" != "success" ]; then
+            echo "::error title=Selection failed::could not work out which packs to test"
+            exit 1
+          fi
+          case "${{ needs.test.result }}" in
+            success|skipped) ;;
+            *) echo "::error title=Tests failed::at least one pack test suite did not pass"; exit 1 ;;
+          esac
