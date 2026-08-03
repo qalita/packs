@@ -2,6 +2,8 @@
     "job": {
         "compute_uniqueness_columns": [],
         "id_columns": [],
+        "exact": true,
+        "duplicate_rows_limit": 10000,
         "source": {
             "skiprows": 0
         }

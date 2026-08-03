@@ -1922,11 +1922,11 @@ wheels = [
 
 [[package]]
 name = "pyasn1"
-version = "0.6.3"
+version = "0.6.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5c/5f/6583902b6f79b399c9c40674ac384fd9cd77805f9e6205075f828ef11fb2/pyasn1-0.6.3.tar.gz", hash = "sha256:697a8ecd6d98891189184ca1fa05d1bb00e2f84b5977c481452050549c8a72cf", size = 148685, upload-time = "2026-03-17T01:06:53.382Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/9a/23310166d960def5897e91fe20e5b724601b02a22e84ba1f94232c0b7f67/pyasn1-0.6.4.tar.gz", hash = "sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81", size = 151262, upload-time = "2026-07-09T01:12:33.988Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/a0/7d793dce3fa811fe047d6ae2431c672364b462850c6235ae306c0efd025f/pyasn1-0.6.3-py3-none-any.whl", hash = "sha256:a80184d120f0864a52a073acc6fc642847d0be408e7c7252f31390c0f4eadcde", size = 83997, upload-time = "2026-03-17T01:06:52.036Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/3b/6163796d69c3977d1e4287bea4a6979161cbbdd170ebb430511e8e1999ce/pyasn1-0.6.4-py3-none-any.whl", hash = "sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b", size = 84410, upload-time = "2026-07-09T01:12:32.92Z" },
 ]
 
 [[package]]
@@ -2216,7 +2216,7 @@ wheels = [
 
 [[package]]
 name = "qalita-core"
-version = "1.5.1"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-storage-blob" },
@@ -2232,7 +2232,6 @@ dependencies = [
     { name = "ibm-db-sa" },
     { name = "openpyxl" },
     { name = "oracledb" },
-    { name = "pandas" },
     { name = "paramiko" },
     { name = "polars" },
     { name = "psycopg2-binary" },
@@ -2249,9 +2248,9 @@ dependencies = [
     { name = "teradatasqlalchemy" },
     { name = "trino" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/d2/02a8a11a7f6d7ca16ffe787e1d6a64d8033091e6069c6f639a24ab58f64b/qalita_core-1.5.1.tar.gz", hash = "sha256:c32708bff20ec358cf94931c40681d1c7b129eb3617d65ea7959e714d9dc2b82", size = 1461494, upload-time = "2026-02-03T16:11:32.02Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6b/d6/bb2d7246d53c2fd7689168c19936e1470f5e5a897489cbd3cad017ad6478/qalita_core-2.0.0.tar.gz", hash = "sha256:644ef46eae299991c28ef72eea55e004a9d1328e461068af3df74621465cfaf2", size = 1556417, upload-time = "2026-08-03T13:45:16.067Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/06/0e9e97841cb662e1dc9700d26ea7be5df73d9a1660f40bfe46d333e33c7a/qalita_core-1.5.1-py3-none-any.whl", hash = "sha256:d1d725ff67e34e6a812f030db4078d30964e7554eec39bee9b05371fd323e4bd", size = 37679, upload-time = "2026-02-03T16:11:29.84Z" },
+    { url = "https://files.pythonhosted.org/packages/91/3f/88452b5968bd4d0f3bedb493680f8a7aace0ded63cff1cd5d1d6bf0ccb45/qalita_core-2.0.0-py3-none-any.whl", hash = "sha256:b928db4808024a9cad07e2a8a99d032dc6cdf637677f5539397614b999e953df", size = 79233, upload-time = "2026-08-03T13:45:14.408Z" },
 ]
 
 [[package]]
@@ -2326,11 +2325,11 @@ wheels = [
 
 [[package]]
 name = "setuptools"
-version = "82.0.0"
+version = "83.0.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/82/f3/748f4d6f65d1756b9ae577f329c951cda23fb900e4de9f70900ced962085/setuptools-82.0.0.tar.gz", hash = "sha256:22e0a2d69474c6ae4feb01951cb69d515ed23728cf96d05513d36e42b62b37cb", size = 1144893, upload-time = "2026-02-08T15:08:40.206Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/26/f5d29e25ffdb535afef2d35cdb55b325298f96debd670da4c325e08d70f4/setuptools-83.0.0.tar.gz", hash = "sha256:025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef", size = 1154254, upload-time = "2026-07-04T15:31:22.699Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/c6/76dc613121b793286a3f91621d7b75a2b493e0390ddca50f11993eadf192/setuptools-82.0.0-py3-none-any.whl", hash = "sha256:70b18734b607bd1da571d097d236cfcfacaf01de45717d59e6e04b96877532e0", size = 1003468, upload-time = "2026-02-08T15:08:38.723Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/40/e1e72872c6354b306daef1703549e8e83b4d43cfea356311bf722a043752/setuptools-83.0.0-py3-none-any.whl", hash = "sha256:29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3", size = 1008090, upload-time = "2026-07-04T15:31:20.885Z" },
 ]
 
 [[package]]
@@ -2427,11 +2426,11 @@ wheels = [
 
 [[package]]
 name = "soupsieve"
-version = "2.8.3"
+version = "2.8.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7b/ae/2d9c981590ed9999a0d91755b47fc74f74de286b0f5cee14c9269041e6c4/soupsieve-2.8.3.tar.gz", hash = "sha256:3267f1eeea4251fb42728b6dfb746edc9acaffc4a45b27e19450b676586e8349", size = 118627, upload-time = "2026-01-20T04:27:02.457Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/2c/0a5f6f8ee0d5589e48c7640213ed5175d52cf540a06725b628cc1a45d6ce/soupsieve-2.8.4.tar.gz", hash = "sha256:e121fd02e975c695e4e9e8774a5ee35d74714b59307868dcc5319ad2d9e3328e", size = 121110, upload-time = "2026-05-24T13:55:57.154Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/2c/1462b1d0a634697ae9e55b3cecdcb64788e8b7d63f54d923fcd0bb140aed/soupsieve-2.8.3-py3-none-any.whl", hash = "sha256:ed64f2ba4eebeab06cc4962affce381647455978ffc1e36bb79a545b91f45a95", size = 37016, upload-time = "2026-01-20T04:27:01.012Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/f5/0c41cb68dcae6b7de4fac4188a3a9589e21fb31df21ea3a2e888db95e6c9/soupsieve-2.8.4-py3-none-any.whl", hash = "sha256:e7e6b0769c8f51ed59acab6e994b00621096cfb1c640a7509295987388fbaf65", size = 37304, upload-time = "2026-05-24T13:55:55.406Z" },
 ]
 
 [[package]]
@@ -2557,17 +2556,19 @@ wheels = [
 
 [[package]]
 name = "text-validation-pack"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "polars" },
     { name = "pyarrow" },
     { name = "qalita-core" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "polars", specifier = ">=1.37.0" },
     { name = "pyarrow", specifier = ">=24.0.0" },
-    { name = "qalita-core", specifier = ">=1.5.0" },
+    { name = "qalita-core", specifier = ">=2.0.0" },
 ]
 
 [[package]]

@@ -4,7 +4,9 @@
       {"column": "name", "min_length": 2, "max_length": 100},
       {"column": "description", "max_length": 500}
     ],
-    "analyze_all_text_columns": true
+    "analyze_all_text_columns": true,
+    "examples_limit": 10,
+    "max_example_columns": 20
   },
   "charts": {
     "overview": [

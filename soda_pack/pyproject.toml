@@ -1,6 +1,6 @@
 [project]
 name = "soda-pack"
-version = "1.0.0"
+version = "1.1.0"
 description = "Check validity format for soda"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
@@ -9,11 +9,18 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "qalita-core>=1.5.0",
+    "qalita-core>=2.0.0",
     "pyarrow>=23.0.1",
     "soda-core>=3.5.5",
-    "soda-core-pandas-dask>=3.5.5",
-    "pandas>=2.0.0",
+    # Replaces soda-core-pandas-dask: that plugin's only entry point,
+    # scan.add_pandas_dataframe, needs the whole dataset materialized as a
+    # pandas frame before dask sees it. The DuckDB plugin runs the same
+    # SodaCL checks as SQL, out-of-core. pandas and dask leave with it.
+    "soda-core-duckdb>=3.5.5",
+    # Transitively available through qalita-core, declared here because this
+    # pack executes its checks in DuckDB rather than merely reading parquet.
+    # soda-core-duckdb currently caps this at <1.1.0.
+    "duckdb>=0.10.0",
 ]
 
 [build-system]

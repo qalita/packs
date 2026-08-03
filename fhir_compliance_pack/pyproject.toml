@@ -1,6 +1,6 @@
 [project]
 name = "fhir-compliance-pack"
-version = "0.1.0"
+version = "0.2.0"
 description = "Validate dataset compliance against HL7 FHIR resources"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
@@ -9,7 +9,8 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
-    "qalita-core>=1.5.0",
+    "qalita-core>=2.0.0",
+    "polars>=1.0.0",
     "pyarrow>=23.0.1",
 ]
 

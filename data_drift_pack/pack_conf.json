@@ -2,16 +2,26 @@
   "job": {
     "reference_window": "2024-01-01:2024-03-31",
     "current_window": "2024-04-01:2024-06-30",
-    "drift_test": "ks"
+    "drift_test": "ks",
+    "bins": 10,
+    "alpha": 0.05,
+    "psi_threshold": 0.2,
+    "exact": false,
+    "examples": 10,
+    "example_columns": 5
   },
   "charts": {
     "overview": [
       {"metric_key": "score", "chart_type": "text", "display_title": true, "justify": true},
-      {"metric_key": "score", "chart_type": "bar_chart", "display_title": true, "justify": false}
+      {"metric_key": "score", "chart_type": "bar_chart", "display_title": true, "justify": false},
+      {"metric_key": "drifted_columns", "chart_type": "text", "display_title": true, "justify": true}
     ],
     "scoped": [
       {"metric_key": "p_value", "chart_type": "text", "display_title": true, "justify": true},
-      {"metric_key": "p_value", "chart_type": "spark_area_chart", "display_title": false, "justify": false}
+      {"metric_key": "p_value", "chart_type": "spark_area_chart", "display_title": false, "justify": false},
+      {"metric_key": "psi", "chart_type": "text", "display_title": true, "justify": true},
+      {"metric_key": "psi", "chart_type": "spark_area_chart", "display_title": false, "justify": false},
+      {"metric_key": "ks_statistic", "chart_type": "text", "display_title": true, "justify": true}
     ]
   }
 }

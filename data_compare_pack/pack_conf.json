@@ -4,6 +4,7 @@
     "id_columns": [],
     "abs_tol": 0.0001,
     "rel_tol": 0,
+    "mismatch_examples": 10,
     "source": {
       "skiprows": 0
     }

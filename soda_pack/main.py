@@ -1,14 +1,40 @@
-from soda.scan import Scan
-from qalita_core.pack import Pack
-import pandas as pd
-from qalita_core.utils import (
-    determine_recommendation_level,
-    replace_whitespaces_with_underscores,
-)
+"""
+# QALITA (c) COPYRIGHT 2025 - ALL RIGHTS RESERVED -
 
-# --- Chargement des données ---
-# Pour un fichier : pack.load_data("source")
-# Pour une base : pack.load_data("source", table_or_query="ma_table")
+Run SodaCL checks over the parquet staging, in DuckDB.
+
+The previous implementation drove the scan with ``scan.add_pandas_dataframe``.
+That is soda-core's only in-memory-frame entry point, it comes from the
+separate soda-core-pandas-dask plugin, and it needs a fully materialized pandas
+frame before dask ever sees it — so the memory needed was the size of the
+dataset, and a source larger than the worker could not be checked at all.
+
+soda-core-duckdb runs the same SodaCL checks as SQL. DuckDB spills aggregates
+and sorts to disk, so the checks now cover every row with bounded memory, and
+soda-core-pandas-dask, dask and pandas all leave the dependency set.
+
+It also fixes a mispairing. The old code zipped the configured table names with
+the parquet paths; when the lengths disagreed — which is exactly what chunking
+causes — its guard fell through to labelling each CHUNK as its own dataset, so
+a single table split into four parts was reported as four datasets, each with
+its own score. Datasets now come from ``pack.tables()`` and each view spans all
+the parts of its object.
+"""
+
+from __future__ import annotations
+
+import logging
+
+import duckdb_view
+from qalita_core.pack import Pack
+from qalita_core.utils import determine_recommendation_level
+from soda.scan import Scan
+from soda_metrics import DATA_SOURCE_NAME, column_aliases, metric_column
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("soda_pack")
+
+
 with Pack() as pack:
     if pack.source_config.get("type") == "database":
         table_or_query = pack.source_config.get("config", {}).get(
@@ -16,89 +42,78 @@ with Pack() as pack:
         )
         if not table_or_query:
             raise ValueError(
-                "For a 'database' type source, you must specify 'table_or_query' in the config."
+                "For a 'database' type source, you must specify "
+                "'table_or_query' in the config."
             )
         pack.load_data("source", table_or_query=table_or_query)
     else:
         pack.load_data("source")
 
-    ########################### Support single or multiple datasets
-    raw_df_source = pack.df_source
-    configured = pack.source_config.get("config", {}).get("table_or_query")
+    tables = pack.tables("source")
+    logger.info("Scanning %d dataset(s): %s", len(tables), ", ".join(tables))
 
-    def _load_parquet_if_path(obj):
+    for table in tables:
+        # A single-object source keeps the source name as its scope value,
+        # which is what the platform already shows for this pack. With several
+        # objects the object name is the only label that tells them apart.
+        dataset_label = (
+            pack.source_config.get("name") or table
+            if len(tables) == 1
+            else table
+        )
+
+        aliases = column_aliases(pack.schema("source", table).keys())
+        column_name_association = {
+            alias: column for column, alias in aliases.items()
+        }
+        logger.info("[%s] columns: %s", dataset_label, list(aliases.values()))
+
+        # One connection per dataset, holding exactly one view: the SodaCL
+        # "include %" in checks.yaml then resolves to this dataset alone.
+        connection = duckdb_view.connect()
         try:
-            if isinstance(obj, str) and obj.lower().endswith(
-                (".parquet", ".pq")
-            ):
-                return pd.read_parquet(obj, engine="pyarrow")
-        except Exception:
-            pass
-        return obj
-
-    if isinstance(raw_df_source, list):
-        loaded = [_load_parquet_if_path(x) for x in raw_df_source]
-        if isinstance(configured, (list, tuple)) and len(configured) == len(
-            loaded
-        ):
-            items = list(zip(list(configured), loaded))
-        else:
-            base = (
-                pack.source_config["name"].replace(" ", "_").replace("-", "_")
+            duckdb_view.create_view(
+                connection,
+                table,
+                pack.objects_source[table],
+                columns=aliases,
             )
-            items = [(f"{base}_{i+1}", df) for i, df in enumerate(loaded)]
-    else:
-        items = [
-            (pack.source_config["name"], _load_parquet_if_path(raw_df_source))
-        ]
+            row_count = duckdb_view.view_row_count(connection, table)
 
-    for dataset_label, df_raw in items:
-        # Dictionary to hold the association between slugified and original column names
-        df, column_name_association = replace_whitespaces_with_underscores(
-            df_raw
-        )
+            scan = Scan()
+            scan.set_data_source_name(DATA_SOURCE_NAME)
+            scan.add_duckdb_connection(
+                duckdb_connection=connection,
+                data_source_name=DATA_SOURCE_NAME,
+            )
+            scan.add_sodacl_yaml_files("checks.yaml")
+            scan.execute()
 
-        print("Slugified Columns :", df.columns)
-        print(
-            "Association table between original col names and slugified ones :",
-            column_name_association,
-        )
+            if scan.has_error_logs():
+                logger.error(
+                    "[%s] Soda reported errors:\n%s",
+                    dataset_label,
+                    scan.get_error_logs_text(),
+                )
 
-        ########################### Scan
-        scan = Scan()
-        data_source_name = dataset_label.replace(" ", "_").replace("-", "_")
-        scan.set_data_source_name(data_source_name)
-        scan.add_pandas_dataframe(
-            data_source_name=data_source_name,
-            dataset_name=data_source_name,
-            pandas_df=df,
-        )
+            results = scan.get_scan_results()
+        finally:
+            connection.close()
 
-        # Add check YAML files
-        scan.add_sodacl_yaml_files("checks.yaml")
-
-        # Execute the scan
-        scan.execute()
-
-        results = scan.get_scan_results()
         checks = results["checks"]
-        ############################ Metrics
 
-        # Reformat the checks object to the desired format
-        for check in results["metrics"]:
-            identity_parts = check["identity"].split("-")
-            source_column = (
-                identity_parts[3] if len(identity_parts) > 3 else None
-            )
-            if source_column == check["metricName"]:
+        # ---------------------------- Metrics
+        for metric in results["metrics"]:
+            metric_name = metric["metricName"]
+            column_slug = metric_column(metric["identity"], table, metric_name)
+            if column_slug is None:
                 scope = {"perimeter": "dataset", "value": dataset_label}
             else:
-                original_column_name = column_name_association.get(
-                    source_column
-                )
                 scope = {
                     "perimeter": "column",
-                    "value": original_column_name,
+                    "value": column_name_association.get(
+                        column_slug, column_slug
+                    ),
                     "parent_scope": {
                         "perimeter": "dataset",
                         "value": dataset_label,
@@ -107,51 +122,65 @@ with Pack() as pack:
 
             pack.metrics.data.append(
                 {
-                    "key": check["metricName"],
-                    "value": check["value"],
+                    "key": metric_name,
+                    "value": metric["value"],
                     "scope": scope,
                 }
             )
 
-        # Initialize counters for pass and total checks
-        total_pass_count = 0
         total_checks = len(checks)
-        for check in checks:
-            if check["outcome"] == "pass":
-                total_pass_count += 1
+        total_pass_count = sum(
+            1 for check in checks if check["outcome"] == "pass"
+        )
 
         dataset_score = (
             total_pass_count / total_checks if total_checks > 0 else 0
         )
-        print(f"[{dataset_label}] Total Checks: {total_checks}")
-        print(f"[{dataset_label}] Passed Checks: {total_pass_count}")
-        print(f"[{dataset_label}] Score: {dataset_score:.2f}")
+        logger.info(
+            "[%s] %d/%d checks passed over %d rows (score %.2f)",
+            dataset_label,
+            total_pass_count,
+            total_checks,
+            row_count,
+            dataset_score,
+        )
 
-        pack.metrics.data.append(
-            {
-                "key": "score",
-                "value": round(dataset_score, 2),
-                "scope": {"perimeter": "dataset", "value": dataset_label},
-            }
-        )
-        pack.metrics.data.append(
-            {
-                "key": "check_passed",
-                "value": total_pass_count,
-                "scope": {"perimeter": "dataset", "value": dataset_label},
-            }
-        )
-        pack.metrics.data.append(
-            {
-                "key": "check_failed",
-                "value": (total_checks - total_pass_count),
-                "scope": {"perimeter": "dataset", "value": dataset_label},
-            }
+        dataset_scope = {"perimeter": "dataset", "value": dataset_label}
+        pack.metrics.data.extend(
+            [
+                {
+                    "key": "score",
+                    "value": round(dataset_score, 2),
+                    "scope": dataset_scope,
+                },
+                {
+                    # Every check ran in DuckDB over the whole view, so no
+                    # figure here is an estimate. The UI labels it as such.
+                    "key": "score_method",
+                    "value": "exact",
+                    "scope": dataset_scope,
+                },
+                {
+                    "key": "check_passed",
+                    "value": total_pass_count,
+                    "scope": dataset_scope,
+                },
+                {
+                    "key": "check_failed",
+                    "value": (total_checks - total_pass_count),
+                    "scope": dataset_scope,
+                },
+                {
+                    "key": "rows_analyzed",
+                    "value": row_count,
+                    "scope": dataset_scope,
+                },
+            ]
         )
 
         # Per-column score
-        column_pass_count = {}
-        column_total_checks = {}
+        column_pass_count: dict[str, int] = {}
+        column_total_checks: dict[str, int] = {}
         for check in checks:
             column = check.get("column") or "dataset"
             column_pass_count[column] = column_pass_count.get(column, 0) + (
@@ -192,51 +221,51 @@ with Pack() as pack:
                 }
             )
 
-        ################# RECOMMENDATIONS #################
-        score = dataset_score
-        if score is not None and score < 1:
+        # ---------------------------- Recommendations
+        if dataset_score < 1:
             pack.recommendations.data.append(
                 {
-                    "content": f"The dataset '{dataset_label}' has PASSED {total_pass_count}/{total_checks} checks giving a score of {score*100}%.",
+                    "content": (
+                        f"The dataset '{dataset_label}' has PASSED "
+                        f"{total_pass_count}/{total_checks} checks giving a "
+                        f"score of {dataset_score * 100}%."
+                    ),
                     "type": "Checks Failed",
-                    "scope": {"perimeter": "dataset", "value": dataset_label},
-                    "level": determine_recommendation_level(score),
+                    "scope": dataset_scope,
+                    "level": determine_recommendation_level(dataset_score),
                 }
             )
 
         for check in checks:
-            if check["outcome"] != "pass":
-                if check["column"] is not None:
-                    original_column_name = column_name_association.get(
-                        check["column"]
-                    )
-                    pack.recommendations.data.append(
-                        {
-                            "content": check["definition"],
-                            "type": check["name"],
-                            "scope": {
-                                "perimeter": "column",
-                                "value": original_column_name,
-                                "parent_scope": {
-                                    "perimeter": "dataset",
-                                    "value": dataset_label,
-                                },
-                            },
-                            "level": "high",
-                        }
-                    )
-                else:
-                    pack.recommendations.data.append(
-                        {
-                            "content": check["definition"],
-                            "type": "Checks Failed",
-                            "scope": {
+            if check["outcome"] == "pass":
+                continue
+            if check["column"] is not None:
+                pack.recommendations.data.append(
+                    {
+                        "content": check["definition"],
+                        "type": check["name"],
+                        "scope": {
+                            "perimeter": "column",
+                            "value": column_name_association.get(
+                                check["column"], check["column"]
+                            ),
+                            "parent_scope": {
                                 "perimeter": "dataset",
                                 "value": dataset_label,
                             },
-                            "level": "high",
-                        }
-                    )
+                        },
+                        "level": "high",
+                    }
+                )
+            else:
+                pack.recommendations.data.append(
+                    {
+                        "content": check["definition"],
+                        "type": "Checks Failed",
+                        "scope": dataset_scope,
+                        "level": "high",
+                    }
+                )
 
     pack.recommendations.save()
     pack.metrics.save()

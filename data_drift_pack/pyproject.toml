@@ -1,7 +1,7 @@
 [project]
 name = "data-drift-pack"
-version = "0.1.0"
-description = "Monitors statistical drift between reference and current datasets"
+version = "0.2.0"
+description = "Monitors distribution drift between reference and current datasets (PSI + binned KS)"
 authors = [
     {name = "QALITA SAS", email = "contact@qalita.io"}
 ]
@@ -9,8 +9,8 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
-    "qalita-core>=1.5.0",
-    "scipy>=1.10.0",
+    "qalita-core>=2.0.0",
+    "polars>=1.0.0",
     "pyarrow>=23.0.1",
 ]
 
