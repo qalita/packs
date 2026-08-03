@@ -1,0 +1,25 @@
+QALITA omop_cdm_pack
+
+This product includes software and data developed by the
+Observational Health Data Sciences and Informatics (OHDSI) program.
+
+  DataQualityDashboard
+  Copyright 2019 Observational Health Data Sciences and Informatics
+  https://github.com/OHDSI/DataQualityDashboard
+  Licensed under the Apache License, Version 2.0
+
+The following parts of this pack are derived from that work and remain
+subject to the Apache License, Version 2.0:
+
+  - omop_dqd/vendor/csv/*.csv
+        Check metadata copied verbatim from inst/csv/ upstream.
+  - omop_dqd/checks/*.py
+        Reimplementations, in Polars, of the SQL templates in
+        inst/sql/sql_server/ upstream. Each module names the SQL
+        template it derives from.
+
+A copy of the Apache License 2.0 is provided in
+omop_dqd/vendor/LICENSE-APACHE-2.0.txt
+
+All other files in this pack are proprietary to QALITA SAS and are
+governed by the QALITA SOFTWARE LICENSE AGREEMENT in LICENSE.
