@@ -16,7 +16,7 @@ dependencies = [
     "great-expectations>=1.0,<2",
     # Transitively available through qalita-core, declared here because this
     # pack executes its checks in DuckDB rather than merely reading parquet.
-    "duckdb>=0.10.0",
+    "duckdb>=1.5.5",
     # SQLAlchemy dialect GX needs to talk to DuckDB at all.
     "duckdb-engine>=0.13.0",
     "pyarrow>=23.0.1",
