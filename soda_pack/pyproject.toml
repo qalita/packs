@@ -7,7 +7,14 @@ authors = [
 ]
 license = {text = "Apache-2.0"}
 readme = "README.md"
-requires-python = ">=3.11,<4.0"
+# Capped at <3.13 by duckdb, not by anything in this pack: soda-core-duckdb
+# 3.5.6 pins duckdb<1.1.0, and no duckdb below 1.1.0 publishes a cp313 wheel
+# (cp313 first appears in 1.1.1). The worker image carries no compiler, so the
+# source build that follows cannot succeed — the cap makes the runner pick the
+# 3.12 the image ships. Lift it once soda-core releases the relaxation already
+# merged upstream (sodadata/soda-core#2527, duckdb>=1.1.0,<2.0); the v3 branch
+# still reports 3.5.6, so it is not on PyPI yet.
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "qalita-core>=2.0.0",
     "pyarrow>=23.0.1",
