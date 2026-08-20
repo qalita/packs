@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "Proprietary"}
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "qalita-core>=2.0.0",
     # main.py is written against the GX 1.x fluent API. The pack used to ask
