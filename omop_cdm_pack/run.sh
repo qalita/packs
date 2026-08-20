@@ -200,11 +200,16 @@ else
 fi
 
 if [ "$installed_from_lock" -eq 0 ]; then
-    if ! uv pip install --python "$VENV_PATH/bin/python" -e .; then
+    # Install the dependencies, not the pack itself: main.py is run from the
+    # pack directory and is never imported as an installed package, and no pack
+    # declares a hatchling file-selection target — so `-e .` fails the build
+    # ("Unable to determine which files to ship inside the wheel") and turns a
+    # recoverable lock failure into a dead job.
+    if ! uv pip install --python "$VENV_PATH/bin/python" -r pyproject.toml; then
         echo "Failed to install requirements with uv."
         exit 1
     fi
-    echo "Requirements installed from the project definition."
+    echo "Requirements installed from pyproject.toml."
 fi
 
 # Run your script
