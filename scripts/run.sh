@@ -110,11 +110,21 @@ fi
 VENV_PATH="$HOME/.qalita/jobs/${PACK_NAME}_py${PYTHON_VERSION}_venv"
 echo "Virtual Environment Path: $VENV_PATH"
 
+# The venv lives on the worker's persistent volume, so a half-created one — a
+# creation interrupted by a full disk, or one whose base interpreter the image
+# no longer ships — outlives the job that made it. Reusing a directory just
+# because it exists makes that state permanent, so prove the interpreter runs
+# before trusting it.
+if [ -d "$VENV_PATH" ] && ! "$VENV_PATH/bin/python" -c "" > /dev/null 2>&1; then
+    echo "Existing virtual environment is unusable, recreating it..."
+    rm -rf "$VENV_PATH"
+fi
+
 if [ ! -d "$VENV_PATH" ]; then
     echo "Creating virtual environment..."
-    "$PYTHON_CMD" -m venv "$VENV_PATH"
-    if [ $? -ne 0 ]; then
+    if ! "$PYTHON_CMD" -m venv "$VENV_PATH"; then
         echo "Failed to create virtual environment for $PACK_NAME."
+        rm -rf "$VENV_PATH"
         exit 1
     fi
     echo "Virtual environment created."
