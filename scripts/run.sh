@@ -86,17 +86,11 @@ PYTHON_CMD="$BEST_CMD"
 PYTHON_VERSION=$($PYTHON_CMD -V | awk '{print $2}' | cut -d'.' -f1,2)
 echo "Selected Python: $PYTHON_CMD (version $PYTHON_VERSION)"
 
-# Install uv if it's not installed
-if ! command -v uv > /dev/null
-then
-    echo "uv could not be found, installing now..."
-    $PYTHON_CMD -m pip install --user uv
-    export PATH="$HOME/.local/bin:$PATH"
-    if [ $? -ne 0 ]; then
-        echo "Failed to install uv."
-        exit 1
-    fi
-fi
+# Make a user-level uv discoverable under minimal PATHs (cron, containers).
+# Appended, not prepended: a uv provided by the environment (worker image)
+# must keep precedence over an older one left in the user's home.
+PATH="$PATH:$HOME/.local/bin"
+export PATH
 
 echo "Detected Python version: $PYTHON_VERSION"
 
@@ -116,11 +110,21 @@ fi
 VENV_PATH="$HOME/.qalita/jobs/${PACK_NAME}_py${PYTHON_VERSION}_venv"
 echo "Virtual Environment Path: $VENV_PATH"
 
+# The venv lives on the worker's persistent volume, so a half-created one — a
+# creation interrupted by a full disk, or one whose base interpreter the image
+# no longer ships — outlives the job that made it. Reusing a directory just
+# because it exists makes that state permanent, so prove the interpreter runs
+# before trusting it.
+if [ -d "$VENV_PATH" ] && ! "$VENV_PATH/bin/python" -c "" > /dev/null 2>&1; then
+    echo "Existing virtual environment is unusable, recreating it..."
+    rm -rf "$VENV_PATH"
+fi
+
 if [ ! -d "$VENV_PATH" ]; then
     echo "Creating virtual environment..."
-    "$PYTHON_CMD" -m venv "$VENV_PATH"
-    if [ $? -ne 0 ]; then
+    if ! "$PYTHON_CMD" -m venv "$VENV_PATH"; then
         echo "Failed to create virtual environment for $PACK_NAME."
+        rm -rf "$VENV_PATH"
         exit 1
     fi
     echo "Virtual environment created."
@@ -158,6 +162,26 @@ unset VIRTUAL_ENV
 # Upgrade pip toolchain
 python -m pip install --upgrade --quiet pip setuptools wheel
 
+# Ensure uv is available. A uv provided by the environment (worker image) is
+# used as-is. Otherwise install it user-wide so every pack shares one copy;
+# pip refuses --user when the interpreter is itself a virtualenv or is
+# externally managed (PEP 668), so fall back to the pack venv, which stays
+# writable even when running unprivileged. Always address the venv
+# interpreter by path: a dangling bin/python would silently fall through to
+# another interpreter on PATH.
+if ! command -v uv > /dev/null 2>&1; then
+    echo "uv could not be found, installing now..."
+    if "$PYTHON_CMD" -m pip install --user uv > /dev/null 2>&1 && command -v uv > /dev/null 2>&1; then
+        echo "Installed uv user-wide."
+    elif "$VENV_PATH/bin/python" -m pip install uv; then
+        echo "No user-wide install possible; installed uv into the pack venv."
+    else
+        echo "Failed to install uv."
+        exit 1
+    fi
+fi
+echo "Using uv: $(command -v uv)"
+
 # Generate lock file and install dependencies with uv
 uv lock
 if [ $? -ne 0 ]; then
@@ -168,16 +192,35 @@ fi
 # Proactively remove Dask-related packages from previous runs to avoid import side effects
 python -m pip uninstall -y dask dask-sql distributed soda-core-pandas-dask 2>/dev/null || true
 
-# Export lock to requirements format and install
-uv export --no-hashes --no-emit-project > requirements.lock.txt 2>/dev/null
-if ! uv pip install --python "$VENV_PATH/bin/python" -r requirements.lock.txt; then
-    echo "Failed to install from exported lock, trying direct install..."
-    if ! uv pip install --python "$VENV_PATH/bin/python" -e .; then
+# Export lock to requirements format and install. A failed export truncates
+# the file to zero bytes, and `uv pip install -r` on an empty file exits 0 —
+# which would install nothing and let the pack run against a stale venv, so
+# the export is only trusted when it both succeeded and produced content.
+installed_from_lock=0
+if uv export --no-hashes --no-emit-project > requirements.lock.txt 2>/dev/null &&
+   [ -s requirements.lock.txt ]; then
+    if uv pip install --python "$VENV_PATH/bin/python" -r requirements.lock.txt; then
+        installed_from_lock=1
+        echo "Requirements installed from exported lock."
+    else
+        echo "Failed to install from exported lock, trying direct install..."
+    fi
+else
+    echo "Failed to export the lock file, trying direct install..."
+fi
+
+if [ "$installed_from_lock" -eq 0 ]; then
+    # Install the dependencies, not the pack itself: main.py is run from the
+    # pack directory and is never imported as an installed package, and no pack
+    # declares a hatchling file-selection target — so `-e .` fails the build
+    # ("Unable to determine which files to ship inside the wheel") and turns a
+    # recoverable lock failure into a dead job.
+    if ! uv pip install --python "$VENV_PATH/bin/python" -r pyproject.toml; then
         echo "Failed to install requirements with uv."
         exit 1
     fi
+    echo "Requirements installed from pyproject.toml."
 fi
-echo "Requirements installed from exported lock."
 
 # Run your script
 echo "Running script..."
