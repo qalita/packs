@@ -18,5 +18,5 @@ tags:
 - IoT
 type: reasonability
 url: https://github.com/qalita/packs/tree/main/outlier_detection_pack
-version: 3.0.0
+version: 3.0.1
 visibility: public

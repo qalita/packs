@@ -18,5 +18,5 @@ tags:
 - Governance
 type: validity
 url: https://github.com/qalita/packs/tree/main/great_expectations_pack
-version: 0.2.0
+version: 0.2.1
 visibility: public
