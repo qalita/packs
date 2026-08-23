@@ -9,7 +9,7 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
 dependencies = [
-    "qalita-core>=2.0.0",
+    "qalita-core>=2.1.1",
     "pyarrow>=23.0.1",
     # Lower bound is 1.30, not 1.0: below 1.25 `collect(engine="streaming")`
     # is swallowed by polars' **kwargs and silently runs the in-memory

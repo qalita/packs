@@ -9,7 +9,7 @@ license = {text = "Proprietary"}
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "qalita-core>=2.0.0",
+    "qalita-core>=2.1.1",
     # main.py is written against the GX 1.x fluent API. The pack used to ask
     # for >=0.16.0 while importing great_expectations.dataset, the V2 API
     # removed in 1.0 — so it resolved to 1.x and raised ImportError on start.

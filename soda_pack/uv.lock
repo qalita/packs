@@ -1712,7 +1712,7 @@ wheels = [
 
 [[package]]
 name = "qalita-core"
-version = "2.1.0"
+version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-storage-blob" },
@@ -1744,9 +1744,9 @@ dependencies = [
     { name = "teradatasqlalchemy" },
     { name = "trino" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/ea/be36dbc3cae59527c6c9ad1c2b72189c7d0158c5a6f59e2353ab26136544/qalita_core-2.1.0.tar.gz", hash = "sha256:f2b249492c4fed3eaf68eecdeec57fc0ecd6cbae21ee27343885b3136b8ee09d", size = 1562979, upload-time = "2026-08-03T14:52:37.699Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/78/c9c57402060141bbd7d19a6a5dd2331c489a4aefb2942cb94f54d1e2a371/qalita_core-2.1.1.tar.gz", hash = "sha256:6c58fe75a572e052fe1c0974332a82d9bc46b869eada35bbf9752a9719e1c7ba", size = 1577945, upload-time = "2026-08-23T18:34:55.1Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/d4/74d8e0e007c6149b5c509b93cd0e581e66a2a6cdfa2ecbf769ca6799d44a/qalita_core-2.1.0-py3-none-any.whl", hash = "sha256:4a7d59d2977e0cfa322089167007459e10c05c55eaea2504183cc2e16e3fe670", size = 81238, upload-time = "2026-08-03T14:52:36.298Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/4b/c867f8f4c9057a15d9e9b63d7c6cd44269183b2f8315574c9249c1fe9ed1/qalita_core-2.1.1-py3-none-any.whl", hash = "sha256:9032f39c0b50392f7b1554f61c94159925ebd21fee673397b408026d143596af", size = 85586, upload-time = "2026-08-23T18:34:53.343Z" },
 ]
 
 [[package]]
@@ -1975,7 +1975,7 @@ dependencies = [
 requires-dist = [
     { name = "duckdb", specifier = ">=0.10.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "qalita-core", specifier = ">=2.0.0" },
+    { name = "qalita-core", specifier = ">=2.1.1" },
     { name = "soda-core", specifier = ">=3.5.5" },
     { name = "soda-core-duckdb", specifier = ">=3.5.5" },
 ]

@@ -13,7 +13,7 @@ requires-python = ">=3.10,<4.0"
 # declared here: it only ever resolved transitively through pyod, so a pyod
 # release that dropped it would have broken this pack at runtime.
 dependencies = [
-    "qalita-core>=2.0.0",
+    "qalita-core>=2.1.1",
     "polars>=1.25.0",
 ]
 

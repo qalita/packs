@@ -16,7 +16,7 @@ readme = "README.md"
 # still reports 3.5.6, so it is not on PyPI yet.
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "qalita-core>=2.0.0",
+    "qalita-core>=2.1.1",
     "pyarrow>=23.0.1",
     "soda-core>=3.5.5",
     # Replaces soda-core-pandas-dask: that plugin's only entry point,

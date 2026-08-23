@@ -48,12 +48,12 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "ciso8601" },
-    { name = "leb128" },
-    { name = "lz4" },
-    { name = "pytz", version = "2025.2", source = { registry = "https://pypi.org/simple" } },
-    { name = "tzlocal" },
-    { name = "zstd" },
+    { name = "ciso8601", marker = "python_full_version < '3.11'" },
+    { name = "leb128", marker = "python_full_version < '3.11'" },
+    { name = "lz4", marker = "python_full_version < '3.11'" },
+    { name = "pytz", version = "2025.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "tzlocal", marker = "python_full_version < '3.11'" },
+    { name = "zstd", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/ce/f11ee2cafa6010d295db3ddee089f14cfc5fa9b8a19d0a21356c18a49267/asynch-0.3.1.tar.gz", hash = "sha256:d8bb3c1793a74a2e9d44cc7e8406ead3cf3818c11ecd6d8405b702b23148c584", size = 59825, upload-time = "2025-11-11T15:20:22.975Z" }
 wheels = [
@@ -79,9 +79,9 @@ resolution-markers = [
     "python_full_version == '3.11.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "ciso8601" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
-    { name = "tzlocal" },
+    { name = "ciso8601", marker = "python_full_version >= '3.11'" },
+    { name = "tzdata", marker = "python_full_version >= '3.11' and sys_platform == 'win32'" },
+    { name = "tzlocal", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2f/a5/b84170b14f6c4ba309cb58201384323aba0057fc3c86653d35ee192ec347/asynch-0.4.0.tar.gz", hash = "sha256:2525b10d5e51c627b078ee0da0103188cf957189017db0398455caae47e11d38", size = 91073, upload-time = "2026-08-14T16:13:46.201Z" }
 wheels = [
@@ -825,7 +825,7 @@ dependencies = [
 requires-dist = [
     { name = "polars", specifier = ">=1.0.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "qalita-core", specifier = ">=2.0.0" },
+    { name = "qalita-core", specifier = ">=2.1.1" },
 ]
 
 [[package]]
@@ -963,7 +963,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -2018,10 +2018,10 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
-    { name = "python-dateutil" },
-    { name = "pytz", version = "2025.2", source = { registry = "https://pypi.org/simple" } },
-    { name = "tzdata" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "python-dateutil", marker = "python_full_version < '3.11'" },
+    { name = "pytz", version = "2025.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "tzdata", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/33/01/d40b85317f86cf08d853a4f495195c73815fdf205eef3993821720274518/pandas-2.3.3.tar.gz", hash = "sha256:e05e1af93b977f7eafa636d043f9f94c7ee3ac81af99c13508215942e64c993b", size = 4495223, upload-time = "2025-09-29T23:34:51.853Z" }
 wheels = [
@@ -2093,10 +2093,10 @@ resolution-markers = [
     "python_full_version == '3.11.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "python-dateutil" },
-    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
+    { name = "python-dateutil", marker = "python_full_version >= '3.11'" },
+    { name = "tzdata", marker = "(python_full_version >= '3.11' and sys_platform == 'emscripten') or (python_full_version >= '3.11' and sys_platform == 'win32')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/4f/5f3422a2afec5ffc46308b79e53291365a93748b498ac2e58bead0197916/pandas-3.0.5.tar.gz", hash = "sha256:dca3734d6ab7c906e6730f0788b0a1dbb9f2467731f9711f77995c8e9d62d712", size = 4658219, upload-time = "2026-07-22T22:19:28.819Z" }
 wheels = [
@@ -2657,7 +2657,7 @@ wheels = [
 
 [[package]]
 name = "qalita-core"
-version = "2.1.0"
+version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-storage-blob" },
@@ -2689,9 +2689,9 @@ dependencies = [
     { name = "teradatasqlalchemy" },
     { name = "trino" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/ea/be36dbc3cae59527c6c9ad1c2b72189c7d0158c5a6f59e2353ab26136544/qalita_core-2.1.0.tar.gz", hash = "sha256:f2b249492c4fed3eaf68eecdeec57fc0ecd6cbae21ee27343885b3136b8ee09d", size = 1562979, upload-time = "2026-08-03T14:52:37.699Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/78/c9c57402060141bbd7d19a6a5dd2331c489a4aefb2942cb94f54d1e2a371/qalita_core-2.1.1.tar.gz", hash = "sha256:6c58fe75a572e052fe1c0974332a82d9bc46b869eada35bbf9752a9719e1c7ba", size = 1577945, upload-time = "2026-08-23T18:34:55.1Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/d4/74d8e0e007c6149b5c509b93cd0e581e66a2a6cdfa2ecbf769ca6799d44a/qalita_core-2.1.0-py3-none-any.whl", hash = "sha256:4a7d59d2977e0cfa322089167007459e10c05c55eaea2504183cc2e16e3fe670", size = 81238, upload-time = "2026-08-03T14:52:36.298Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/4b/c867f8f4c9057a15d9e9b63d7c6cd44269183b2f8315574c9249c1fe9ed1/qalita_core-2.1.1-py3-none-any.whl", hash = "sha256:9032f39c0b50392f7b1554f61c94159925ebd21fee673397b408026d143596af", size = 85586, upload-time = "2026-08-23T18:34:53.343Z" },
 ]
 
 [[package]]

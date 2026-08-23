@@ -18,5 +18,5 @@ tags:
 - BI
 type: schema
 url: https://github.com/qalita/packs/tree/main/schema_scanner_pack
-version: 3.0.2
+version: 3.1.0
 visibility: public
