@@ -7,17 +7,24 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKS_DIR="$ROOT_DIR"
-SOURCE_RUN_SH="$PACKS_DIR/scripts/run.sh"
+# The platform picks a runner per worker OS, so a pack ships all three or it is
+# not runnable everywhere: on Windows the CLI looks for run.bat, then run.ps1,
+# then a bash on PATH, and gives up when it finds none. This list must stay the
+# same as the one in .github/workflows/publish.yml — syncing only run.sh here is
+# how manually published packs ended up with no Windows runner at all.
+RUNNERS=(run.sh run.bat run.ps1)
 
 if [[ ! -d "$PACKS_DIR" ]]; then
   echo "Packs directory not found at $PACKS_DIR" >&2
   exit 1
 fi
 
-if [[ ! -f "$SOURCE_RUN_SH" ]]; then
-  echo "Source run.sh not found at $SOURCE_RUN_SH" >&2
-  exit 1
-fi
+for runner in "${RUNNERS[@]}"; do
+  if [[ ! -f "$PACKS_DIR/scripts/$runner" ]]; then
+    echo "Source $runner not found at $PACKS_DIR/scripts/$runner" >&2
+    exit 1
+  fi
+done
 
 mapfile -t PROP_FILES < <(find "$PACKS_DIR" -mindepth 2 -maxdepth 2 -type f -name properties.yaml | sort)
 
@@ -40,8 +47,10 @@ for prop in "${PROP_FILES[@]}"; do
     continue
   fi
 
-  echo "Syncing run.sh into $pack_dir..."
-  cp -f "$SOURCE_RUN_SH" "$pack_dir/run.sh"
+  echo "Syncing runners into $pack_dir..."
+  for runner in "${RUNNERS[@]}"; do
+    cp -f "$PACKS_DIR/scripts/$runner" "$pack_dir/$runner"
+  done
   chmod +x "$pack_dir/run.sh"
 
   echo "Pushing pack '$pack_name' from $pack_dir..."

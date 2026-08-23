@@ -94,13 +94,47 @@ jobs:
         working-directory: ${{ matrix.pack }}
         run: .venv/bin/python -m pytest tests -q
 
+  # The Linux and the Windows runner are one program written twice, and nothing
+  # compared them: scripts/run.ps1 stayed on January's install logic for seven
+  # months while scripts/run.sh took three fixes. This job is the comparison.
+  runners:
+    name: Runner parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0  # the diff needs the base commit, not just HEAD
+
+      - name: Self-test the parity check
+        # A guard that never refuses anything looks exactly like a guard that
+        # works, so check it against a diff it must refuse before trusting it.
+        run: tests/test_runner_parity.sh
+
+      - name: Fail if run.sh moved without run.ps1
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            # New branch, force-push, or a first commit: `before` is the null
+            # SHA and there is nothing to compare against.
+            echo "no usable base ref ('$BASE'), nothing to compare"
+            exit 0
+          fi
+          if ! git diff --name-only "$BASE" HEAD | scripts/check_runner_parity.sh; then
+            echo "::error title=Windows runner left behind::scripts/run.sh changed but scripts/run.ps1 did not — port the change, or record in a comment there why it does not apply"
+            exit 1
+          fi
+
   # The matrix is dynamic, so "Pytest - profiling_pack" cannot be a required
   # check: on a PR that does not touch profiling_pack it never reports and the
   # PR waits forever. This job has a fixed name, always runs, and fails if any
   # matrix job did — it is the one to put in branch protection.
   gate:
     name: Tests
-    needs: [select, test]
+    needs: [select, test, runners]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -109,7 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "selected: ${{ needs.select.outputs.packs }}"
-          echo "select: ${{ needs.select.result }} / test: ${{ needs.test.result }}"
+          echo "select: ${{ needs.select.result }} / test: ${{ needs.test.result }} / runners: ${{ needs.runners.result }}"
           # 'skipped' is the honest answer when a change touched no testable
           # pack; only failure and cancellation are refusals.
           if [ "${{ needs.select.result }}" != "success" ]; then
@@ -120,3 +154,9 @@ jobs:
             success|skipped) ;;
             *) echo "::error title=Tests failed::at least one pack test suite did not pass"; exit 1 ;;
           esac
+          # Wired into the required check on purpose: a red job nobody has to
+          # look at is how the runners drifted apart in the first place.
+          if [ "${{ needs.runners.result }}" != "success" ]; then
+            echo "::error title=Runner parity failed::the Windows runner was not kept in step with run.sh"
+            exit 1
+          fi
