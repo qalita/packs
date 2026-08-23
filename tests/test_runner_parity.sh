@@ -33,6 +33,29 @@ expect_guard "run.sh together with run.ps1 is accepted" 0 scripts/run.sh scripts
 expect_guard "run.ps1 alone is accepted" 0 scripts/run.ps1
 expect_guard "a change touching neither runner is accepted" 0 profiling_pack/main.py
 
+# The workflow itself chooses the commit range before it invokes the guard.
+# Execute that exact run block with no base ref: a green job here would leave
+# run.sh changes on a force-push outside the parity check.
+expect_missing_base_is_refused() {
+  local output status=0
+  output=$(awk '
+    $0 == "      - name: Fail if run.sh moved without run.ps1" { in_step = 1; next }
+    in_step && $0 == "        run: |" { in_run = 1; next }
+    in_run && /^  [^ ]/ { exit }
+    in_run { sub(/^          /, ""); print }
+  ' "$ROOT_DIR/.github/workflows/tests.yml" | BASE= bash -s 2>&1) || status=$?
+
+  if [ "$status" -ne 1 ]; then
+    fail "runner-parity workflow refuses a missing base ref (expected exit 1, got $status)"
+  elif [[ "$output" != *"::error"* ]]; then
+    fail "runner-parity workflow annotates a missing base ref"
+  else
+    echo "ok: runner-parity workflow refuses and annotates a missing base ref"
+  fi
+}
+
+expect_missing_base_is_refused
+
 # push_all_packs.sh syncs the runners of the repository it lives in, so the
 # fixture is a throwaway copy of the script next to a throwaway pack — running
 # the real one here would rewrite the working tree and push to the platform.

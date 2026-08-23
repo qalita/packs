@@ -118,10 +118,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            # New branch, force-push, or a first commit: `before` is the null
-            # SHA and there is nothing to compare against.
-            echo "no usable base ref ('$BASE'), nothing to compare"
-            exit 0
+            # A new branch, force-push, or first commit can make `before`
+            # unusable. Do not pass a required check when the comparison that
+            # protects the Windows runner could not be made.
+            echo "::error title=Runner parity base unavailable::no usable base ref ('$BASE'); cannot verify that scripts/run.sh and scripts/run.ps1 changed together"
+            exit 1
           fi
           if ! git diff --name-only "$BASE" HEAD | scripts/check_runner_parity.sh; then
             echo "::error title=Windows runner left behind::scripts/run.sh changed but scripts/run.ps1 did not — port the change, or record in a comment there why it does not apply"
