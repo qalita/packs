@@ -9,7 +9,7 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "qalita-core>=2.0.0",
+    "qalita-core>=2.1.1",
     "polars>=1.37.1",
     "pyarrow>=23.0.1",
     "openpyxl>=3.1.2",

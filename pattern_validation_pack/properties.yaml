@@ -18,5 +18,5 @@ tags:
 - Regex
 type: validity
 url: https://github.com/qalita/packs/tree/main/pattern_validation_pack
-version: 0.2.2
+version: 0.3.0
 visibility: public

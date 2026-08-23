@@ -16,6 +16,6 @@ tags:
 - OHDSI
 - Interoperability
 type: conformity
-version: 0.1.1
+version: 0.2.0
 visibility: private
 url: https://github.com/qalita/packs/tree/main/omop_cdm_pack
