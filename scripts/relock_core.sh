@@ -9,10 +9,11 @@
 # or anywhere else. `--upgrade-package` is the only thing that moves the pin,
 # and neither run.sh nor bump_pack_versions.sh passes it.
 #
-# Run this after a core release and before bumping/pushing: the "moved" list
-# printed at the end is exactly the set of packs whose behaviour changed and
-# that therefore need a version bump. See AGENTS.md, "Propager un correctif
-# qalita-core".
+# Run this after a core release and before bumping/pushing: the list of locks
+# differing from HEAD printed at the end is exactly the set of packs whose
+# behaviour changed and that therefore need a version bump. Comparing with
+# HEAD preserves that release list across a failed run and its later retry.
+# See AGENTS.md, "Propager un correctif qalita-core".
 #
 # Usage: scripts/relock_core.sh
 set -euo pipefail
@@ -37,26 +38,33 @@ locked_version() {
   ' "$lock"
 }
 
-# A pack is any directory carrying pack metadata. Also requiring a
-# pyproject.toml skips the metadata-only stubs, which have no lock to move.
+# A pack is any directory carrying pack metadata. A directory with metadata
+# but no pyproject.toml is malformed: silently skipping it can publish an
+# incomplete release. Directories without metadata remain unrelated stubs.
 packs=()
+failed=()
 for dir in */; do
   pack="${dir%/}"
   [ -f "$pack/properties.yaml" ] || [ -f "$pack/pack_conf.json" ] || continue
   if [ ! -f "$pack/pyproject.toml" ]; then
-    echo "[$pack] no pyproject.toml, skipping" >&2
+    echo "[$pack] no pyproject.toml" >&2
+    failed+=("$pack")
     continue
   fi
   packs+=("$pack")
 done
 
 if [ ${#packs[@]} -eq 0 ]; then
-  echo "No pack found under $PWD" >&2
+  if [ ${#failed[@]} -gt 0 ]; then
+    echo "No valid pack found under $PWD" >&2
+    echo "Failed to re-lock:" >&2
+    printf '  %s\n' "${failed[@]}" >&2
+  else
+    echo "No pack found under $PWD" >&2
+  fi
   exit 1
 fi
 
-moved=()
-failed=()
 for pack in "${packs[@]}"; do
   before="$(locked_version "$pack/uv.lock")"
 
@@ -76,16 +84,26 @@ for pack in "${packs[@]}"; do
     echo "[$pack] $PACKAGE $after (unchanged)"
   else
     echo "[$pack] $PACKAGE ${before:-none} -> $after"
-    moved+=("$pack")
+  fi
+done
+
+changed_packs=()
+for lock in *_pack/uv.lock; do
+  [ -f "$lock" ] || continue
+  # git diff HEAD includes both staged and unstaged changes. An untracked
+  # newly-created lock has no HEAD counterpart and also needs a pack bump.
+  if ! git ls-files --error-unmatch -- "$lock" > /dev/null 2>&1 || \
+    ! git diff --quiet HEAD -- "$lock"; then
+    changed_packs+=("${lock%/uv.lock}")
   fi
 done
 
 echo
-if [ ${#moved[@]} -gt 0 ]; then
-  echo "Moved onto a new $PACKAGE — bump the version of these packs, then push:"
-  printf '  %s\n' ${moved[@]+"${moved[@]}"}
+if [ ${#changed_packs[@]} -gt 0 ]; then
+  echo "Locks differing from HEAD — bump the version of these packs, then push:"
+  printf '  %s\n' "${changed_packs[@]}"
 else
-  echo "No pack moved: every lock was already on the newest $PACKAGE."
+  echo "No locks differ from HEAD: no pack version bump is required."
 fi
 
 if [ ${#failed[@]} -gt 0 ]; then

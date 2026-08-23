@@ -224,7 +224,8 @@ Le re-lock ne se produit donc jamais tout seul : ni sur le worker, ni dans
 
 1. Tag core `X.Y.Z` sur `main`, attendre la publication PyPI.
 2. `./scripts/relock_core.sh` — re-locke chaque pack sur la nouvelle version et
-   liste ceux qui ont bougé.
+   liste chaque lock qui diffère de `HEAD`, y compris ceux déjà modifiés par
+   une tentative précédente interrompue.
 3. Bumper la version des packs listés à l'étape 2 (voir ci-dessous).
 4. `./push_all_packs.sh`.
 
