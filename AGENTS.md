@@ -45,9 +45,10 @@ cd <pack_directory> && pylint .
 # Format code
 cd <pack_directory> && black .
 
-# Version management
-./scripts/bump_pack_versions.sh
-./scripts/push_all_packs.sh
+# Version management — after a qalita-core release, in this order
+./scripts/relock_core.sh   # move every pack's uv.lock onto the new qalita-core
+./bump_pack_versions.sh    # patch bump only, see "Propager un correctif qalita-core"
+./push_all_packs.sh
 ```
 
 ## Code Conventions
@@ -87,8 +88,12 @@ packs/
 ├── soda_pack/                   # Soda integration
 ├── dbt_checks_pack/             # dbt integration
 ├── scripts/                     # Utility scripts
-│   ├── bump_pack_versions.sh
-│   └── push_all_packs.sh
+│   ├── lint_packs.sh
+│   ├── relock_core.sh           # re-lock every pack onto a new qalita-core
+│   ├── run.sh                   # pack entrypoint, copied into each pack on push
+│   └── select_test_matrix.sh
+├── bump_pack_versions.sh        # release scripts live at the root, not in scripts/
+├── push_all_packs.sh
 └── tests/                       # Tests
 ```
 
@@ -186,6 +191,65 @@ plancher déclaré. Les deux packs pilotes avaient un lock figé sur une vieille
 version sans `FiguresAsset` — le pack installait quand même, et cassait à
 l'exécution plutôt qu'à l'installation. Après avoir bumpé la dépendance :
 `cd <pack>_pack && uv lock`.
+
+Attention : ce `uv lock` nu ne remonte le lock que parce que le plancher vient
+de passer *au-dessus* de la version verrouillée, qui ne satisfait donc plus le
+manifeste. Quand le plancher ne bouge pas — le cas de tout correctif core
+publié sans changement d'API — le même `uv lock` ne fait rien. Voir
+« Propager un correctif `qalita-core` » : même piège, vu depuis l'autre bout,
+et c'est ce bout-là qui coûte cher.
+
+## Propager un correctif `qalita-core`
+
+`core/AGENTS.md` (« Release order: core before packs ») fixe l'ordre : core
+taggé et publié sur PyPI **avant** que le travail correspondant ne soit mergé
+dans `packs/main`. Cet ordre est nécessaire, pas suffisant : il garantit que
+les packs *peuvent* s'installer, pas que le correctif *arrive*.
+
+Un pack publié embarque son `uv.lock`, et `scripts/run.sh` rejoue `uv lock`
+puis `uv export` à chaque job. Or `uv lock` conserve une dépendance déjà
+verrouillée tant qu'elle satisfait le plancher déclaré. Tous les packs
+déclarent `qalita-core>=2.0.0` : un lock figé sur 2.0.0 y reste indéfiniment,
+même après la publication de 2.1.0. Mesuré sur uv 0.11.13, plancher `>=2.0.0`,
+lock sur 2.0.0, 2.1.0 disponible sur PyPI :
+
+| commande | version retenue |
+|----------|-----------------|
+| `uv lock` | 2.0.0 (lock inchangé, octet pour octet) |
+| `uv sync` | 2.0.0 |
+| `uv lock --upgrade-package qalita-core` | 2.1.0 |
+
+Le re-lock ne se produit donc jamais tout seul : ni sur le worker, ni dans
+`bump_pack_versions.sh`, qui lance un `uv lock` nu. Séquence complète :
+
+1. Tag core `X.Y.Z` sur `main`, attendre la publication PyPI.
+2. `./scripts/relock_core.sh` — re-locke chaque pack sur la nouvelle version et
+   liste chaque lock qui diffère de `HEAD`, y compris ceux déjà modifiés par
+   une tentative précédente interrompue.
+3. Bumper la version des packs listés à l'étape 2 (voir ci-dessous).
+4. `./push_all_packs.sh`.
+
+Sauter l'étape 2 est silencieux et c'est ce qui la rend dangereuse : les étapes
+3 et 4 republient un pack dont le numéro de version a changé mais qui embarque
+toujours l'ancien `qalita-core`. Le symptôme côté utilisateur est « le
+correctif annoncé ne change rien », c'est-à-dire le pire retour possible.
+
+### Quel bump pour le pack ?
+
+Le code du pack n'a pas changé, son résultat si. La règle suit ce que voit
+l'utilisateur, pas la taille du diff :
+
+- **Mineur** dès que le correctif core change la lecture des sources
+  (`delimiter`, `encoding`, `has_header`, `decimal_separator`). Les valeurs
+  parsées changent, donc les métriques produites changent, donc l'historique
+  de scores de la plateforme devient non comparable de part et d'autre du
+  bump. Un patch laisserait croire à un correctif invisible.
+- **Patch** quand le correctif core ne touche ni au parsing ni aux valeurs
+  produites : performance, message d'erreur, consommation mémoire.
+
+`bump_pack_versions.sh` n'incrémente que le patch. Un re-lock derrière un
+correctif de lecture de sources se bumpe donc à la main dans le
+`properties.yaml` de chaque pack listé par `relock_core.sh`.
 
 ## Git Workflow
 
