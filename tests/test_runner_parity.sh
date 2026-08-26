@@ -56,29 +56,132 @@ expect_missing_base_is_refused() {
 
 expect_missing_base_is_refused
 
-# push_all_packs.sh syncs the runners of the repository it lives in, so the
-# fixture is a throwaway copy of the script next to a throwaway pack — running
-# the real one here would rewrite the working tree and push to the platform.
+# push_all_packs.sh stages packs from the repository it lives in, so the fixture
+# is a throwaway repository with one throwaway pack. Running the real script
+# here would push to the platform; only that external CLI boundary is replaced.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-mkdir -p "$tmp/scripts" "$tmp/demo_pack" "$tmp/bin"
+mkdir -p "$tmp/scripts" "$tmp/demo_pack" "$tmp/bin" "$tmp/capture"
 cp "$ROOT_DIR/push_all_packs.sh" "$tmp/push_all_packs.sh"
+cp "$ROOT_DIR/.gitignore" "$tmp/.gitignore"
 for runner in run.sh run.bat run.ps1; do
   printf 'marker for %s\n' "$runner" > "$tmp/scripts/$runner"
 done
 printf 'name: demo\nversion: 1.0.0\n' > "$tmp/demo_pack/properties.yaml"
-# The script ends by pushing to the platform; stub the CLI so the test
-# exercises the sync and stops there.
-printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/qalita"
+printf 'print("committed source")\n' > "$tmp/demo_pack/main.py"
+
+(
+  cd "$tmp"
+  git init -q
+  git config user.email test@example.invalid
+  git config user.name "Qalita Packs Tests"
+  git add .gitignore push_all_packs.sh scripts demo_pack/properties.yaml demo_pack/main.py
+  git commit -qm fixture
+)
+
+# A tracked modification must be staged from the working tree, not from HEAD.
+printf 'print("modified tracked source")\n' > "$tmp/demo_pack/main.py"
+
+# This file is intentionally untracked but not ignored: manual publishing must
+# retain the current working tree, not silently fall back to HEAD.
+printf 'release note\n' > "$tmp/demo_pack/local-note.txt"
+
+# These local-only files reproduce what made the real archive reach 198 MB.
+mkdir -p \
+  "$tmp/demo_pack/.venv/bin" \
+  "$tmp/demo_pack/venv/bin" \
+  "$tmp/demo_pack/.pytest_cache" \
+  "$tmp/demo_pack/__pycache__" \
+  "$tmp/demo_pack/.mypy_cache" \
+  "$tmp/demo_pack/.ruff_cache" \
+  "$tmp/demo_pack/build" \
+  "$tmp/demo_pack/dist" \
+  "$tmp/demo_pack/demo.egg-info"
+printf 'python binary\n' > "$tmp/demo_pack/.venv/bin/python"
+printf 'python binary\n' > "$tmp/demo_pack/venv/bin/python"
+printf 'pytest state\n' > "$tmp/demo_pack/.pytest_cache/state"
+printf 'bytecode\n' > "$tmp/demo_pack/__pycache__/main.pyc"
+printf 'mypy state\n' > "$tmp/demo_pack/.mypy_cache/state"
+printf 'ruff state\n' > "$tmp/demo_pack/.ruff_cache/state"
+printf 'build output\n' > "$tmp/demo_pack/build/output"
+printf 'wheel\n' > "$tmp/demo_pack/dist/demo.whl"
+printf 'metadata\n' > "$tmp/demo_pack/demo.egg-info/PKG-INFO"
+printf '{"generated": true}\n' > "$tmp/demo_pack/metrics.json"
+
+local_artifacts=(
+  .venv/bin/python
+  venv/bin/python
+  .pytest_cache/state
+  __pycache__/main.pyc
+  .mypy_cache/state
+  .ruff_cache/state
+  build/output
+  dist/demo.whl
+  demo.egg-info/PKG-INFO
+  metrics.json
+)
+artifact_checksums="$tmp/capture/source-artifacts.sha256"
+(
+  cd "$tmp/demo_pack"
+  sha256sum "${local_artifacts[@]}"
+) > "$artifact_checksums"
+
+# Capture the exact pack tree visible to the CLI. This keeps staging and file
+# selection real while replacing only the external upload.
+cat > "$tmp/bin/qalita" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${QALITA_TEST_CAPTURE:?}"
+find demo_pack -type f -printf '%P\n' | LC_ALL=C sort > "$QALITA_TEST_CAPTURE"
+cp demo_pack/main.py "${QALITA_TEST_MAIN:?}"
+EOF
 chmod +x "$tmp/bin/qalita"
 
-if PATH="$tmp/bin:$PATH" "$tmp/push_all_packs.sh" > /dev/null 2>&1; then
-  for runner in run.sh run.bat run.ps1; do
-    if [ -f "$tmp/demo_pack/$runner" ]; then
-      echo "ok: push_all_packs.sh syncs $runner"
+manifest="$tmp/capture/manifest"
+if (
+  cd "$tmp"
+  QALITA_TEST_CAPTURE="$manifest" \
+    QALITA_TEST_MAIN="$tmp/capture/main.py" \
+    PATH="$tmp/bin:$PATH" \
+    ./push_all_packs.sh
+) > /dev/null 2>&1; then
+  for included in properties.yaml main.py local-note.txt run.sh run.bat run.ps1; do
+    if grep -Fqx "$included" "$manifest"; then
+      echo "ok: staged pack includes $included"
     else
-      fail "push_all_packs.sh did not sync $runner into the pack"
+      fail "staged pack omitted $included"
+    fi
+  done
+
+  for excluded in "${local_artifacts[@]}"; do
+    if grep -Fqx "$excluded" "$manifest"; then
+      fail "staged pack included ignored artifact $excluded"
+    else
+      echo "ok: staged pack excludes $excluded"
+    fi
+  done
+
+  if grep -Fqx 'print("modified tracked source")' "$tmp/capture/main.py"; then
+    echo "ok: staged pack uses modified tracked content"
+  else
+    fail "staged pack did not use modified tracked content"
+  fi
+
+  if (
+    cd "$tmp/demo_pack"
+    sha256sum --check "$artifact_checksums" > /dev/null
+  ); then
+    echo "ok: source pack preserves local artifact contents"
+  else
+    fail "source pack changed or removed a local artifact"
+  fi
+
+  for runner in run.sh run.bat run.ps1; do
+    if [ -e "$tmp/demo_pack/$runner" ]; then
+      fail "push_all_packs.sh copied $runner into the source pack"
+    else
+      echo "ok: source pack is not mutated with $runner"
     fi
   done
 else
