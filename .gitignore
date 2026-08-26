@@ -1,4 +1,14 @@
 **/__pycache__/
+# Local Python environments, tool caches, and build outputs are never pack
+# assets. push_all_packs.sh stages the working tree through Git's ignore rules.
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/build/
+**/dist/
+**/*.egg-info/
 target_conf.json
 docker-compose.yml
 metrics.json
