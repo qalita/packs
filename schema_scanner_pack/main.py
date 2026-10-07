@@ -163,24 +163,64 @@ def schema_entries(
     ]
 
 
+# Source types qalita_core reads with a file reader: a file, a folder of files,
+# an object store. Every other type is a catalogue of tables, collections or
+# indexes. qalita_core never calls a source type "database" -- the literal this
+# pack used to compare against -- so the database tree was never emitted.
+FILE_SOURCE_TYPES = frozenset(
+    {
+        "file",
+        "csv",
+        "excel",
+        "json",
+        "parquet",
+        "folder",
+        "s3",
+        "gcs",
+        "azure_blob",
+        "hdfs",
+    }
+)
+
+
+def is_database_source(source_config: Dict[str, Any]) -> bool:
+    source_type = str(source_config.get("type") or "").lower()
+    return bool(source_type) and source_type not in FILE_SOURCE_TYPES
+
+
+def dataset_entries(
+    labels: Dict[str, str], source_name: str, is_database: bool
+) -> List[Dict[str, Any]]:
+    """One ``dataset`` entry per object, under a ``database`` for databases."""
+    entries = []
+    for dataset_name in labels.values():
+        scope = dataset_scope(dataset_name)
+        if is_database:
+            scope["parent_scope"] = {
+                "perimeter": "database",
+                "value": source_name,
+            }
+        entries.append(
+            {"key": "dataset", "value": dataset_name, "scope": scope}
+        )
+    if is_database:
+        entries.append(
+            {
+                "key": "database",
+                "value": source_name,
+                "scope": {"perimeter": "database", "value": source_name},
+            }
+        )
+    return entries
+
+
 def main() -> None:
     with Pack() as pack:
-        if pack.source_config.get("type") == "database":
-            table_or_query = pack.source_config.get("config", {}).get(
-                "table_or_query"
-            )
-            if not table_or_query:
-                raise ValueError(
-                    "For a 'database' type source, you must specify "
-                    "'table_or_query' in the config."
-                )
-            pack.load_data("source", table_or_query=table_or_query)
-        else:
-            pack.load_data("source")
+        # A database source reads config.table_or_query: a table, a list, or
+        # every table when it is unset or "*".
+        pack.load_data("source")
 
-        is_database = pack.source_config.get("type") == "database"
         labels = dataset_labels(pack, "source")
-
         for table, dataset_name in labels.items():
             schema = pack.schema("source", table)
             row_count = pack.get_row_count("source", table)
@@ -194,41 +234,13 @@ def main() -> None:
                 schema_metrics(dataset_name, schema, row_count)
             )
 
-            if is_database:
-                pack.schemas.data.append(
-                    {
-                        "key": "dataset",
-                        "value": dataset_name,
-                        "scope": {
-                            "perimeter": "dataset",
-                            "value": dataset_name,
-                            "parent_scope": {
-                                "perimeter": "database",
-                                "value": pack.source_config["name"],
-                            },
-                        },
-                    }
-                )
-            else:
-                pack.schemas.data.append(
-                    {
-                        "key": "dataset",
-                        "value": dataset_name,
-                        "scope": dataset_scope(dataset_name),
-                    }
-                )
-
-        if is_database:
-            pack.schemas.data.append(
-                {
-                    "key": "database",
-                    "value": pack.source_config["name"],
-                    "scope": {
-                        "perimeter": "database",
-                        "value": pack.source_config["name"],
-                    },
-                }
+        pack.schemas.data.extend(
+            dataset_entries(
+                labels,
+                pack.source_config["name"],
+                is_database_source(pack.source_config),
             )
+        )
 
         pack.schemas.save()
         pack.metrics.save()

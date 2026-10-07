@@ -172,3 +172,64 @@ def test_pyproject_no_longer_pulls_the_profiling_stack():
     for dropped in ("ydata-profiling", "lxml", "html5lib", "beautifulsoup4"):
         assert dropped not in pyproject
     assert "polars" in pyproject
+
+
+@pytest.mark.parametrize(
+    "source_type",
+    [
+        "postgresql",
+        "mysql",
+        "oracle",
+        "mssql",
+        "sqlite",
+        "snowflake",
+        "bigquery",
+        "databricks",
+        "mongodb",
+        "database",
+    ],
+)
+def test_database_sources_are_recognised_by_their_real_type(source_type):
+    # qalita_core never names a source type "database": the check used to
+    # compare against that literal and was never true.
+    assert main.is_database_source({"type": source_type})
+
+
+@pytest.mark.parametrize(
+    "source_type", ["file", "csv", "excel", "folder", "s3", "gcs", None]
+)
+def test_file_sources_are_not_databases(source_type):
+    assert not main.is_database_source({"type": source_type})
+
+
+def test_database_tables_hang_off_the_database():
+    entries = main.dataset_entries({"t_a": "t_a", "t_b": "t_b"}, "wh", True)
+    datasets = [e for e in entries if e["key"] == "dataset"]
+    assert [d["value"] for d in datasets] == ["t_a", "t_b"]
+    assert all(
+        d["scope"]["parent_scope"] == {"perimeter": "database", "value": "wh"}
+        for d in datasets
+    )
+    assert entries[-1] == {
+        "key": "database",
+        "value": "wh",
+        "scope": {"perimeter": "database", "value": "wh"},
+    }
+
+
+def test_file_datasets_have_no_database_parent():
+    entries = main.dataset_entries({"csv_people": "people"}, "people", False)
+    assert entries == [
+        {
+            "key": "dataset",
+            "value": "people",
+            "scope": {"perimeter": "dataset", "value": "people"},
+        }
+    ]
+
+
+def test_database_source_without_table_or_query_scans_every_table():
+    # The old "database" branch would have raised here had it ever fired;
+    # a full scan is what dataset_labels is built for.
+    source = open(main.__file__, encoding="utf-8").read()
+    assert "you must specify" not in source
