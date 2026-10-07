@@ -1,0 +1,30 @@
+{
+  "job": {
+    "source": {
+      "skiprows": 0
+    },
+    "tables": [],
+    "excluded_tables": [],
+    "table": null,
+    "extensions": [],
+    "type_strictness": "auto",
+    "conventions": true,
+    "cnil_compliant": false
+  },
+  "charts": {
+    "overview": [
+      {
+        "metric_key": "score",
+        "chart_type": "text",
+        "display_title": true,
+        "justify": true
+      },
+      {
+        "metric_key": "score",
+        "chart_type": "bar_chart",
+        "display_title": true,
+        "justify": false
+      }
+    ]
+  }
+}

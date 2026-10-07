@@ -1,0 +1,22 @@
+compatible_sources:
+- mysql
+- postgresql
+- sqlite
+- oracle
+- file
+- csv
+- excel
+- folder
+description: Checks that a source conforms to the codoc data model (tables, columns,
+  types, required fields, primary keys, varchar lengths)
+icon: icon.png
+name: codoc_schema
+tags:
+- Healthcare
+- codoc
+- Data Modeling
+- Interoperability
+type: schema
+version: 0.1.0
+visibility: public
+url: https://github.com/qalita/packs/tree/main/codoc_schema_pack

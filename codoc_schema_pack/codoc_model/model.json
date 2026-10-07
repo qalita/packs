@@ -1,0 +1,1399 @@
+{
+  "source": {
+    "repository": "https://github.com/codoc-health/codoc-data-model-docs",
+    "commit": "1ae8fc4f9d08b1e76ccbf09fc989b5171f233064"
+  },
+  "tables": {
+    "dwh_data": {
+      "domain": "clinical_data",
+      "columns": [
+        {
+          "name": "data_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_patient"
+        },
+        {
+          "name": "thesaurus_data_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_data"
+        },
+        {
+          "name": "thesaurus_code",
+          "datatype": "varchar",
+          "length": 40,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "start_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "end_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "val_numeric",
+          "datatype": "double",
+          "length": 53,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "operator",
+          "datatype": "varchar",
+          "length": 5,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "val_text",
+          "datatype": "varchar",
+          "length": 10000,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "lower_bound",
+          "datatype": "double",
+          "length": 53,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upper_bound",
+          "datatype": "double",
+          "length": 53,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "instance_data_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_origin_code",
+          "datatype": "varchar",
+          "length": 60,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "id_data_source",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "stay_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_patient_stay"
+        },
+        {
+          "name": "department_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_department"
+        },
+        {
+          "name": "document_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_document"
+        },
+        {
+          "name": "data_pid",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "data_salt",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {
+        "pmsi": [
+          {
+            "name": "activity_form",
+            "datatype": "varchar",
+            "length": 4,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "intersectoriel_number",
+            "datatype": "varchar",
+            "length": 6,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "residency_zip_code",
+            "datatype": "integer",
+            "length": 32,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          }
+        ],
+        "drugs": [
+          {
+            "name": "frequency",
+            "datatype": "integer",
+            "length": 32,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "period",
+            "datatype": "integer",
+            "length": 32,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "period_unit",
+            "datatype": "varchar",
+            "length": 25,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "route",
+            "datatype": "varchar",
+            "length": 50,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "data_status",
+            "datatype": "varchar",
+            "length": 20,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "data_unit",
+            "datatype": "varchar",
+            "length": 25,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "daily_details",
+            "datatype": "varchar",
+            "length": 400,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "drug_condition",
+            "datatype": "boolean",
+            "length": null,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          },
+          {
+            "name": "drug_condition_reason",
+            "datatype": "varchar",
+            "length": 4000,
+            "required": false,
+            "primary_key": false,
+            "foreign_key": null
+          }
+        ]
+      }
+    },
+    "dwh_document": {
+      "domain": "clinical_data",
+      "columns": [
+        {
+          "name": "document_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_patient"
+        },
+        {
+          "name": "title",
+          "datatype": "varchar",
+          "length": 400,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_type",
+          "datatype": "varchar",
+          "length": 100,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "author",
+          "datatype": "varchar",
+          "length": 200,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "displayed_text",
+          "datatype": "text",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "stay_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_patient_stay"
+        },
+        {
+          "name": "department_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_department"
+        },
+        {
+          "name": "unit_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_unit"
+        },
+        {
+          "name": "instance_document_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_origin_code",
+          "datatype": "varchar",
+          "length": 60,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "id_doc_source",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_pid",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_salt",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_patient": {
+      "domain": "clinical_data",
+      "columns": [
+        {
+          "name": "patient_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "lastname",
+          "datatype": "varchar",
+          "length": 120,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "maiden_name",
+          "datatype": "varchar",
+          "length": 120,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "firstname",
+          "datatype": "varchar",
+          "length": 120,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "birth_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "sex",
+          "datatype": "varchar",
+          "length": 2,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "nss",
+          "datatype": "varchar",
+          "length": 20,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "phone_number",
+          "datatype": "varchar",
+          "length": 50,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "email",
+          "datatype": "varchar",
+          "length": 500,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "residence_address",
+          "datatype": "varchar",
+          "length": 1000,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "residence_country",
+          "datatype": "varchar",
+          "length": 100,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "residence_city",
+          "datatype": "varchar",
+          "length": 200,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "zip_code",
+          "datatype": "varchar",
+          "length": 30,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "birth_country",
+          "datatype": "varchar",
+          "length": 100,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "birth_city",
+          "datatype": "varchar",
+          "length": 200,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "birth_zip_code",
+          "datatype": "varchar",
+          "length": 30,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "death_code",
+          "datatype": "varchar",
+          "length": 2,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "death_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "is_merged",
+          "datatype": "boolean",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "merged_into",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_patient"
+        },
+        {
+          "name": "max_date",
+          "datatype": "date",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "id_patient_source",
+          "datatype": "varchar",
+          "length": 255,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "instance_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_pid",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_salt",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_patient_ipphist": {
+      "domain": "clinical_data",
+      "columns": [
+        {
+          "name": "ipphist_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_patient"
+        },
+        {
+          "name": "hospital_patient_id",
+          "datatype": "varchar",
+          "length": 100,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "origin_patient_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "master_patient_id",
+          "datatype": "boolean",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "instance_ipp_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "ipp_origin_code",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_patient_mvt": {
+      "domain": "clinical_data",
+      "columns": [
+        {
+          "name": "mvt_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_patient"
+        },
+        {
+          "name": "stay_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_patient_stay"
+        },
+        {
+          "name": "entry_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "out_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "mvt_entry_mode",
+          "datatype": "varchar",
+          "length": 500,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "mvt_exit_mode",
+          "datatype": "varchar",
+          "length": 500,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "type_mvt",
+          "datatype": "varchar",
+          "length": 30,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "mvt_order",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "department_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_department"
+        },
+        {
+          "name": "unit_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_unit"
+        },
+        {
+          "name": "instance_mvt_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "mvt_origin_code",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "id_mvt_source",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "mvt_pid",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "mvt_salt",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_patient_stay": {
+      "domain": "clinical_data",
+      "columns": [
+        {
+          "name": "stay_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "encounter_num",
+          "datatype": "varchar",
+          "length": 300,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_patient"
+        },
+        {
+          "name": "entry_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "out_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "entry_mode",
+          "datatype": "varchar",
+          "length": 500,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "out_mode",
+          "datatype": "varchar",
+          "length": 500,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "type_dos",
+          "datatype": "varchar",
+          "length": 50,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "instance_stay_id",
+          "datatype": "varchar",
+          "length": 40,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "stay_origin_code",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "stay_pid",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "stay_salt",
+          "datatype": "varchar",
+          "length": 300,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_thesaurus_data": {
+      "domain": "vocabularies",
+      "columns": [
+        {
+          "name": "thesaurus_data_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "thesaurus_code",
+          "datatype": "varchar",
+          "length": 30,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "concept_code",
+          "datatype": "varchar",
+          "length": 100,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "concept_str",
+          "datatype": "varchar",
+          "length": 2000,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "description",
+          "datatype": "varchar",
+          "length": 4000,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "measuring_unit",
+          "datatype": "varchar",
+          "length": 50,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "value_type",
+          "datatype": "varchar",
+          "length": 50,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "list_values",
+          "datatype": "varchar",
+          "length": 4000,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "thesaurus_parent_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_data"
+        },
+        {
+          "name": "count_data_used",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_thesaurus_department": {
+      "domain": "health_system",
+      "columns": [
+        {
+          "name": "department_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "department_code",
+          "datatype": "varchar",
+          "length": 30,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "department_str",
+          "datatype": "varchar",
+          "length": 400,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "site_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_site"
+        },
+        {
+          "name": "instance_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "hospital_instance"
+        },
+        {
+          "name": "unit_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "movement_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "department_master",
+          "datatype": "boolean",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_thesaurus_site": {
+      "domain": "health_system",
+      "columns": [
+        {
+          "name": "site_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "site_code",
+          "datatype": "varchar",
+          "length": 30,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "site_str",
+          "datatype": "varchar",
+          "length": 400,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "instance_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": "hospital_instance"
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "dwh_thesaurus_unit": {
+      "domain": "health_system",
+      "columns": [
+        {
+          "name": "unit_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "unit_code",
+          "datatype": "varchar",
+          "length": 50,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "unit_str",
+          "datatype": "varchar",
+          "length": 400,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "department_num",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": "dwh_thesaurus_department"
+        },
+        {
+          "name": "unit_start_date",
+          "datatype": "date",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "unit_end_date",
+          "datatype": "date",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "document_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "movement_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "patient_count",
+          "datatype": "integer",
+          "length": 32,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    },
+    "hospital_instance": {
+      "domain": "health_system",
+      "columns": [
+        {
+          "name": "id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": true,
+          "primary_key": true,
+          "foreign_key": null
+        },
+        {
+          "name": "code",
+          "datatype": "varchar",
+          "length": 30,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "name",
+          "datatype": "varchar",
+          "length": 400,
+          "required": true,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "upload_id",
+          "datatype": "bigint",
+          "length": 64,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        },
+        {
+          "name": "update_date",
+          "datatype": "timestamptz",
+          "length": null,
+          "required": false,
+          "primary_key": false,
+          "foreign_key": null
+        }
+      ],
+      "extensions": {}
+    }
+  }
+}
