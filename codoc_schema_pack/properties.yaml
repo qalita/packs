@@ -17,6 +17,6 @@ tags:
 - Data Modeling
 - Interoperability
 type: schema
-version: 0.1.2
+version: 0.2.0
 visibility: public
 url: https://github.com/qalita/packs/tree/main/codoc_schema_pack

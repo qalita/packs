@@ -220,7 +220,10 @@ def _count(finding: Finding) -> str:
 
 
 def build_recommendations(
-    results: List[TableResult], dataset: str, unmatched_objects=()
+    results: List[TableResult],
+    dataset: str,
+    unmatched_objects=(),
+    skipped_objects=(),
 ) -> List[dict]:
     """One recommendation per failing check.
 
@@ -285,6 +288,14 @@ def build_recommendations(
                 "info",
             )
 
+    for item in skipped_objects:
+        # The error class only: a reader's message can quote a source value.
+        add(
+            f"Source object {item.get('object')} could not be read "
+            f"({item.get('error', 'error')}) and was not checked.",
+            _dataset(dataset),
+            "warning",
+        )
     for key in unmatched_objects:
         add(
             f"Source object {key} matches no codoc table in scope and was not checked. "

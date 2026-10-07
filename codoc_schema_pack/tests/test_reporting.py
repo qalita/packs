@@ -70,3 +70,23 @@ def test_schemas_cover_present_tables_and_model_columns(results):
     assert "hospital_instance" not in values
     assert "dwh_thesaurus_site.update_date" in values  # missing, still a node
     assert "dwh_thesaurus_site.extra" in values
+
+
+def test_skipped_objects_are_reported_without_the_reader_message(results):
+    recs = build_recommendations(
+        results,
+        "src",
+        skipped_objects=[
+            {
+                "object": "dwh_data.csv",
+                "error": "ComputeError",
+                "reason": "could not parse 'Dupont' as i64",
+            }
+        ],
+    )
+    [rec] = [r for r in recs if "could not be read" in r["content"]]
+    assert (
+        "dwh_data.csv" in rec["content"] and "ComputeError" in rec["content"]
+    )
+    assert "Dupont" not in rec["content"]  # a source value never leaks
+    assert rec["level"] == "warning"

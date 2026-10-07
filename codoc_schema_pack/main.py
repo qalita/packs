@@ -147,27 +147,30 @@ if __name__ == "__main__":
             "strict" if strict else "lenient",
         )
 
-        unmatched = []
         if is_database:
             loaded = load_database_tables(pack, scope)
         else:
-            loaded, unmatched = load_file_tables(pack, scope, config["table"])
-            if not loaded:
+            loaded = load_file_tables(pack, scope, config["table"])
+            if not loaded.tables:
                 raise ValueError(
                     "No object of this source matches a codoc table "
-                    f"({', '.join(unmatched)}). Name each file after its "
-                    "codoc table (dwh_patient.csv...) or set job.table."
+                    f"({', '.join(loaded.unmatched) or 'none readable'}). "
+                    "Name each file after its codoc table "
+                    "(dwh_patient.csv...) or set job.table."
                 )
             # A single file is one table: the others are out of scope, not
             # missing.
-            if not config["tables"] and len(loaded) + len(unmatched) == 1:
-                scope = list(loaded)
+            if (
+                not config["tables"]
+                and len(loaded.tables) + len(loaded.unmatched) == 1
+            ):
+                scope = list(loaded.tables)
 
-        results = run_checks(model, scope, loaded, config, strict)
+        results = run_checks(model, scope, loaded.tables, config, strict)
 
         pack.metrics.data = build_metrics(results, dataset)
         pack.recommendations.data = build_recommendations(
-            results, dataset, unmatched
+            results, dataset, loaded.unmatched, loaded.skipped
         )
         pack.schemas.data = build_schemas(results, dataset)
         declare_figures(pack.figures, results, dataset)
