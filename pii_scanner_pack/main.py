@@ -142,18 +142,9 @@ def _metric(key: str, value: Any, scope: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def run(pack: Pack) -> None:
-    if pack.source_config.get("type") == "database":
-        table_or_query = pack.source_config.get("config", {}).get(
-            "table_or_query"
-        )
-        if not table_or_query:
-            raise ValueError(
-                "For a 'database' type source, you must specify "
-                "'table_or_query' in the config."
-            )
-        pack.load_data("source", table_or_query=table_or_query)
-    else:
-        pack.load_data("source")
+    # load_data reads config.table_or_query: a table, a list, a query,
+    # or every table of a database when it is unset.
+    pack.load_data("source")
 
     patterns = _supported_patterns(_job(pack).get("pii_patterns", []) or [])
     if not patterns:
