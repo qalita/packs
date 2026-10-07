@@ -74,9 +74,12 @@ nothing.
 - **Database** (`postgresql`, `mysql`, `oracle`, `mssql`, `sqlite`): point the source at the
   schema holding the warehouse (`config.schema`). Tables are listed, then each codoc table is
   read by name, case-insensitively.
-- **Directory** (`folder`, or `file` with a directory path): one file per table, named after it
-  (`dwh_patient.csv`, `hospital_instance.parquet`…). Files matching no codoc table are skipped
-  and listed in an `info` recommendation.
+- **Directory** (`folder` source, qalita-core ≥ 2.1.3): one file per table, named after it
+  (`dwh_patient.csv`, `hospital_instance.parquet`…). The folder source reads every data file;
+  files matching no codoc table are not checked and are listed in an `info` recommendation, and
+  files it cannot read are listed in a `warning` one (file name and error type only). Restrict
+  what is read with the source's `table_or_query` (`["dwh_patient", "dwh_patient_stay"]`). A
+  `file` source pointing at a directory is refused: qalita-core would read its first file only.
 - **Single file**: checked as the codoc table it is named after (or `job.table`); the other
   tables are out of scope, not missing.
 
