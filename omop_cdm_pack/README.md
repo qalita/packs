@@ -55,3 +55,9 @@ property this port exists to preserve. Measure before assuming either way.
 
 Check metadata and check logic derive from the OHDSI DataQualityDashboard, licensed
 under Apache 2.0. See `NOTICE`. All other files are proprietary to QALITA SAS.
+
+### Icon
+`icon.png` is the OHDSI logo, taken from the avatar of the [OHDSI](https://github.com/OHDSI)
+GitHub organisation that publishes the
+[DataQualityDashboard](https://github.com/OHDSI/DataQualityDashboard); it identifies the
+check suite this pack ports and remains OHDSI's property.
