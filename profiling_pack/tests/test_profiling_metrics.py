@@ -334,3 +334,19 @@ def test_dataset_name_falls_back_to_the_source_name():
 
     assert main.dataset_name_for(FakePack(), "file_clients", 1) == "clients"
     assert main.dataset_name_for(FakePack(), "db_orders", 3) == "db_orders"
+
+
+@pytest.mark.parametrize(
+    "source_type",
+    ["postgresql", "mysql", "oracle", "sqlite", "snowflake", "mongodb"],
+)
+def test_database_sources_are_recognised_by_their_real_type(source_type):
+    # qalita_core never names a source type "database": the check used to
+    # compare against that literal, so the database scope never reached the
+    # metrics of a database source.
+    assert main.is_database_source({"type": source_type})
+
+
+@pytest.mark.parametrize("source_type", ["file", "csv", "folder", "s3", None])
+def test_file_sources_are_not_databases(source_type):
+    assert not main.is_database_source({"type": source_type})

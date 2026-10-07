@@ -236,18 +236,9 @@ def write_excel(frame: "pl.DataFrame", path: str) -> str:
 
 def main() -> None:
     with Pack() as pack:
-        if pack.source_config.get("type") == "database":
-            table_or_query = pack.source_config.get("config", {}).get(
-                "table_or_query"
-            )
-            if not table_or_query:
-                raise ValueError(
-                    "For a 'database' type source, you must specify "
-                    "'table_or_query' in the config."
-                )
-            pack.load_data("source", table_or_query=table_or_query)
-        else:
-            pack.load_data("source")
+        # load_data reads config.table_or_query: a table, a list, a query,
+        # or every table of a database when it is unset.
+        pack.load_data("source")
 
         job = pack.pack_config.get("job") or {}
         # Exact by default: see duplicate_counts() for why the approximate

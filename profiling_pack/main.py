@@ -204,6 +204,31 @@ def profile_dataset(lf, schema, options):
     return prof
 
 
+# Source types qalita_core reads with a file reader: a file, a folder of files,
+# an object store. Every other type is a catalogue of tables, collections or
+# indexes. qalita_core never calls a source type "database" -- the literal this
+# pack used to compare against -- so the database scope was never emitted.
+FILE_SOURCE_TYPES = frozenset(
+    {
+        "file",
+        "csv",
+        "excel",
+        "json",
+        "parquet",
+        "folder",
+        "s3",
+        "gcs",
+        "azure_blob",
+        "hdfs",
+    }
+)
+
+
+def is_database_source(source_config):
+    source_type = str(source_config.get("type") or "").lower()
+    return bool(source_type) and source_type not in FILE_SOURCE_TYPES
+
+
 def _scope(dataset_name, column=None, database=None):
     if column is not None:
         return {
@@ -765,19 +790,10 @@ def main():
             "count", unit="count", direction="neutral", label="Occurrences"
         )
 
-        is_database = pack.source_config.get("type") == "database"
-        if is_database:
-            table_or_query = pack.source_config.get("config", {}).get(
-                "table_or_query"
-            )
-            if not table_or_query:
-                raise ValueError(
-                    "For a 'database' type source, you must specify "
-                    "'table_or_query' in the config."
-                )
-            pack.load_data("source", table_or_query=table_or_query)
-        else:
-            pack.load_data("source")
+        is_database = is_database_source(pack.source_config)
+        # load_data reads config.table_or_query: a table, a list, a query,
+        # or every table of a database when it is unset.
+        pack.load_data("source")
 
         options = read_options(pack.pack_config)
         objects = pack.tables("source")

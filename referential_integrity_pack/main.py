@@ -200,17 +200,8 @@ def run(pack: Pack) -> None:
     source_tables = _relation_tables(relations, "source")
     target_tables = _relation_tables(relations, "target")
 
-    if pack.source_config.get("type") == "database" and not source_tables:
-        table_or_query = pack.source_config.get("config", {}).get(
-            "table_or_query"
-        )
-        if not table_or_query:
-            raise ValueError(
-                "For a 'database' type source, you must specify "
-                "'table_or_query' in the config, or declare "
-                "job.relations[].parent.table in pack_conf.json."
-            )
-        source_tables = _as_list(table_or_query)
+    # Without relation tables, _load_tables falls back to load_data's own
+    # reading of config.table_or_query: a table, a list, or every table.
     _load_tables(pack, "source", source_tables)
 
     if target_tables:
