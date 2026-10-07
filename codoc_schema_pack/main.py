@@ -11,6 +11,12 @@ import polars as pl
 from qalita_core.pack import Pack
 
 from codoc_model.checks import check_table, missing_table
+from codoc_model.conventions import (
+    instance_code_findings,
+    relaxed_required,
+    rule_checks,
+    rules_for,
+)
 from codoc_model.reporting import (
     build_metrics,
     build_recommendations,
@@ -64,7 +70,13 @@ def read_job(job: dict, model) -> dict:
         raise ValueError(
             f"job.type_strictness must be one of {STRICTNESS}, got {strictness!r}"
         )
+    flags = {}
+    for key, default in (("conventions", True), ("cnil_compliant", False)):
+        flags[key] = job.get(key, default)
+        if not isinstance(flags[key], bool):
+            raise ValueError(f"job.{key} must be true or false")
     return {
+        **flags,
         "tables": tables,
         "excluded": excluded,
         "table": declared,
@@ -78,6 +90,43 @@ def read_job(job: dict, model) -> dict:
 def tables_in_scope(model, config: dict) -> list:
     names = config["tables"] or list(model.tables)
     return [name for name in names if name not in config["excluded"]]
+
+
+def run_checks(model, scope, loaded, config, strict) -> list:
+    """One TableResult per table in scope, conventions included."""
+    frames = {name: pl.scan_parquet(parts) for name, parts in loaded.items()}
+    results = {}
+    for name in scope:
+        table = model.tables[name]
+        if name not in frames:
+            logger.info("%s: missing", name)
+            results[name] = missing_table(table)
+            continue
+        rules = rules_for(
+            table, config["conventions"], config["cnil_compliant"]
+        )
+        deferred, evaluated = rule_checks(name, frames[name], rules)
+        result = check_table(
+            table,
+            frames[name],
+            extensions=config["extensions"],
+            strict_types=strict,
+            extra=deferred,
+            relaxed_required=relaxed_required(name, config["cnil_compliant"]),
+        )
+        result.findings.extend(evaluated)
+        results[name] = result
+
+    if config["conventions"]:
+        instance_code_findings(
+            {name: r for name, r in results.items() if r.present}, frames
+        )
+    for name, result in results.items():
+        if result.present:
+            logger.info(
+                "%s: %d rows, score %.2f", name, result.rows, result.score
+            )
+    return list(results.values())
 
 
 if __name__ == "__main__":
@@ -114,23 +163,7 @@ if __name__ == "__main__":
             if not config["tables"] and len(loaded) + len(unmatched) == 1:
                 scope = list(loaded)
 
-        results = []
-        for name in scope:
-            table = model.tables[name]
-            if name not in loaded:
-                logger.info("%s: missing", name)
-                results.append(missing_table(table))
-                continue
-            result = check_table(
-                table,
-                pl.scan_parquet(loaded[name]),
-                extensions=config["extensions"],
-                strict_types=strict,
-            )
-            logger.info(
-                "%s: %d rows, score %.2f", name, result.rows, result.score
-            )
-            results.append(result)
+        results = run_checks(model, scope, loaded, config, strict)
 
         pack.metrics.data = build_metrics(results, dataset)
         pack.recommendations.data = build_recommendations(

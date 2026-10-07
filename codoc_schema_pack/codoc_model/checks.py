@@ -169,8 +169,16 @@ def check_table(
     frame: pl.LazyFrame,
     extensions=(),
     strict_types: bool = False,
+    extra=(),
+    relaxed_required=(),
 ) -> TableResult:
-    """Every check of one present table, in model column order."""
+    """Every check of one present table, in model column order.
+
+    ``extra`` holds further ``(finding, violation count expression)`` pairs
+    -- the value conventions -- folded into the same single aggregation.
+    ``relaxed_required`` names required columns whose NOT NULL check is
+    dropped.
+    """
     schema = dict(frame.collect_schema())
     stored = resolve_columns(schema)
     known = table.known_columns()
@@ -212,7 +220,15 @@ def check_table(
                 required=column.required,
             )
         )
-        _column_checks(column, name, schema[name], strict_types, defer, result)
+        _column_checks(
+            column,
+            name,
+            schema[name],
+            strict_types,
+            defer,
+            result,
+            check_not_null=column.name not in relaxed_required,
+        )
 
     for lowered, name in stored.items():
         if lowered not in known:
@@ -227,6 +243,9 @@ def check_table(
                     detail="column not defined by the codoc data model",
                 )
             )
+
+    for finding, expr in extra:
+        defer(finding, expr)
 
     counts = (
         frame.select(aggregations)
@@ -264,7 +283,16 @@ def _present_and_expected(
     return expected + extra
 
 
-def _column_checks(column, name, dtype, strict_types, defer, result) -> None:
+def _column_checks(  # pylint: disable=too-many-arguments
+    column,
+    name,
+    dtype,
+    strict_types,
+    defer,
+    result,
+    *,
+    check_not_null=True,
+) -> None:
     table = result.table
     actual = family_of(dtype)
     relation = classify_type(column.family, actual)
@@ -292,7 +320,7 @@ def _column_checks(column, name, dtype, strict_types, defer, result) -> None:
     else:
         result.findings.append(type_finding)
 
-    if column.required:
+    if column.required and check_not_null:
         defer(
             Finding(
                 table,

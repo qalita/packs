@@ -12,6 +12,15 @@ failed check drowned among the hundreds a present table produces.
 from collections import Counter, defaultdict
 from typing import Dict, List
 
+from codoc_model.conventions import (
+    ACCEPTED_VALUES,
+    CNIL_NULL,
+    CONDITIONAL_VALUE,
+    DATE_ORDER,
+    INSTANCE_CODE,
+    MASTER_IDENTIFIER,
+    UPLOAD_ID_FORMAT,
+)
 from codoc_model.checks import (
     COLUMN_PRESENT,
     COLUMN_TYPE,
@@ -34,7 +43,23 @@ COLUMN_METRIC = {
     PRIMARY_KEY: "primary_key_violations",
     MAX_LENGTH: "length_violations",
     UNEXPECTED_COLUMN: "column_unexpected",
+    ACCEPTED_VALUES: "accepted_values_violations",
+    DATE_ORDER: "date_order_violations",
+    CONDITIONAL_VALUE: "conditional_value_violations",
+    UPLOAD_ID_FORMAT: "upload_id_format_violations",
+    MASTER_IDENTIFIER: "master_identifier_violations",
+    INSTANCE_CODE: "instance_code_violations",
+    CNIL_NULL: "identifying_values",
 }
+CONVENTIONS = (
+    ACCEPTED_VALUES,
+    DATE_ORDER,
+    CONDITIONAL_VALUE,
+    UPLOAD_ID_FORMAT,
+    MASTER_IDENTIFIER,
+    INSTANCE_CODE,
+    CNIL_NULL,
+)
 
 
 def overall_score(results: List[TableResult]) -> float:
@@ -103,6 +128,13 @@ def build_metrics(results: List[TableResult], dataset: str) -> List[dict]:
             "scope": scope,
         },
     ]
+    metrics.append(
+        {
+            "key": "conventions_failed_count",
+            "value": sum(len(_failed(results, c)) for c in CONVENTIONS),
+            "scope": scope,
+        }
+    )
     for check, key in COLUMN_METRIC.items():
         metrics.append(
             {
@@ -168,7 +200,13 @@ def build_metrics(results: List[TableResult], dataset: str) -> List[dict]:
 
 
 def _level(finding: Finding) -> str:
-    if finding.check in (TABLE_PRESENT, NOT_NULL, PRIMARY_KEY):
+    if finding.check in (
+        TABLE_PRESENT,
+        NOT_NULL,
+        PRIMARY_KEY,
+        MASTER_IDENTIFIER,
+        CNIL_NULL,
+    ):
         return "high"
     if finding.check == UNEXPECTED_COLUMN:
         return "info"
@@ -275,6 +313,38 @@ def _finding_text(finding: Finding) -> str:
         )
     if finding.check == MAX_LENGTH:
         return f"{where} exceeds {finding.expected} in {_count(finding)}."
+    if finding.check == ACCEPTED_VALUES:
+        return (
+            f"{where} holds values outside the codoc convention "
+            f"({finding.expected}) in {_count(finding)}."
+        )
+    if finding.check == DATE_ORDER:
+        return f"{where} breaks {finding.expected} in {_count(finding)}."
+    if finding.check == CONDITIONAL_VALUE:
+        return (
+            f"{where} must be {finding.expected}; violated in "
+            f"{_count(finding)}."
+        )
+    if finding.check == UPLOAD_ID_FORMAT:
+        return (
+            f"{where} is not a {finding.expected} pipeline timestamp in "
+            f"{_count(finding)}."
+        )
+    if finding.check == MASTER_IDENTIFIER:
+        return (
+            f"{finding.violations} of {finding.rows} patients do not have "
+            f"exactly one master identifier in {finding.table}."
+        )
+    if finding.check == INSTANCE_CODE:
+        return (
+            f"{where} holds codes unknown to hospital_instance.code in "
+            f"{_count(finding)}."
+        )
+    if finding.check == CNIL_NULL:
+        return (
+            f"{where} must be null in a CNIL compliant warehouse but is set "
+            f"in {_count(finding)}."
+        )
     return f"{where}: {finding.detail}"
 
 
