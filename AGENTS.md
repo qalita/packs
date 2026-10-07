@@ -84,6 +84,7 @@ packs/
 ├── timeliness_pack/             # Data freshness
 ├── fhir_compliance_pack/        # FHIR compliance
 ├── omop_cdm_pack/               # OMOP CDM quality (OHDSI DQD port)
+├── codoc_schema_pack/           # codoc data model schema conformance
 ├── great_expectations_pack/     # Great Expectations integration
 ├── soda_pack/                   # Soda integration
 ├── dbt_checks_pack/             # dbt integration
