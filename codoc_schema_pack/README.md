@@ -121,5 +121,10 @@ moving the pinned commit.
 uv sync && .venv/bin/python -m pytest tests -q
 ```
 
+### Icon
+`icon.png` is the codoc logo, taken from the avatar of the
+[codoc-health](https://github.com/codoc-health) GitHub organisation that publishes the data
+model; it identifies the model this pack checks against and remains codoc's property.
+
 ### Contribute
 This pack is part of QALITA Open Source Assets (QOSA). Contributions are welcome: https://github.com/qalita/packs.
