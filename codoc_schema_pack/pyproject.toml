@@ -13,7 +13,7 @@ dependencies = [
     "pyarrow>=23.0.1",
     # Same bounds as omop_cdm_pack: below 1.25 `collect(engine="streaming")`
     # silently runs the in-memory engine; 2.0 is an untested major.
-    "polars>=1.30,<2",
+    "polars>=1.30,<3",
 ]
 
 [dependency-groups]
