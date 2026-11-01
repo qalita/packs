@@ -20,7 +20,7 @@ dependencies = [
     # deprecated dtype-set constants this pack works around, and
     # changes streaming-engine behaviour. Widen only with a run of
     # the suite against the new major.
-    "polars>=1.30,<2",
+    "polars>=1.30,<3",
 ]
 
 [build-system]
